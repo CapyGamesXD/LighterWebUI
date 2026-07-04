@@ -1,19 +1,46 @@
 //@ts-nocheck
 import { json } from "@sveltejs/kit";
 import ollama from 'ollama'
+import { encode } from "punycode";
 
-export async function POST({ request, cookies }) {
-	const { messages } = await request.json();
+function testTools() {
+  return Math.random()
 
-
-
-const response = await ollama.chat({
-  model: 'qwen2.5:3b',
-  messages: [{role: 'user', content: messages}],
-})
-console.log(response.message.content)
-
-
-    const reply = response.message.content;
-	return json({ reply }, { status: 201 });
 }
+
+export async function POST({ request }) {
+  
+  const{ messages, selectedModel } = await request.json();
+
+
+  let aiReply = '';
+const stream = new ReadableStream({
+  async start(c) {
+    const encoder = new TextEncoder();
+
+  
+      const response = await ollama.chat({
+  model: selectedModel,
+  messages: messages,
+  stream: true,
+
+      })
+
+for await(const chunk of response) {
+  if(chunk.message.content) {
+aiReply += chunk.message.content;
+     c.enqueue(encoder.encode(chunk.message.content))
+      }
+
+}
+
+console.log(messages)
+    c.close();
+  }
+}) 
+ 
+
+return new Response(stream)
+    
+}
+  
