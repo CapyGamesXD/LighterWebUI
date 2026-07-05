@@ -37,6 +37,7 @@
 		"vite": "^8.0.16"
 	},
 	"dependencies": {
+		"acebase": "^1.29.13",
 		"ollama": "^0.6.3",
 		"ollama-ai-provider": "^1.2.0"
 	}
