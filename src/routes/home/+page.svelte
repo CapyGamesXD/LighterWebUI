@@ -5,10 +5,23 @@ import { onMount } from "svelte";
 let models = $state();
 let selectedModel = $state();
 let replying = $state(false);
+let chatArray = $state([]);
 onMount(() => {
     fetchModels();
     getMessages();
 })
+
+async function newChat() {
+    const response = await fetch('/API/database/newChat', {method: 'POST', body: JSON.stringify({userId, chatId, chatName})})
+    chatArray = response.json();
+    console.log(chatArray)
+}
+
+async function loadChats() {
+    const response = await fetch('/API/database/fetchChats', {method: 'POST', body: JSON.stringify(userId)})
+    chatArray = response.json();
+    console.log(chatArray)
+}
    
 async function fetchModels() {
     const response = await fetch('/API/fetchModels', {method: 'POST'})
@@ -24,9 +37,11 @@ let reply = $state('');
 let messages = $state([])
 let controller;
 let systemPrompt = $state('You are an AI assistant. Be friendly and helpful')
-
+let sideMenu = $state();
+let menuShown = $state(false)
 const userId = '34359';
 const chatId = 'chat-1'
+let chatName = $state('My Super Awesome Chat!');
 
 async function getMessages() {
     const response = await fetch('/API/database/fetch', {
@@ -112,25 +127,31 @@ async function sendPrompt(prompt) {
 
 </script>
 <div class="centerdiv">
+<div class="leftMenu" class:hiddenMenu={!menuShown} bind:this={sideMenu}>
+
+</div>
 <div class="topBar">
-<button>=</button>
+
   <p class="koulen text-xl">
         <a href="/lighterDoc" class="koulen">Lighter</a>
         <a href="/webDoc" class="koulen">Web</a> 
         <a href="/uiDoc" class="koulen">UI</a>
     </p>
-    
+    <button onclick={() => {
+        menuShown = !menuShown;
+
+}}>=</button>
+
 <select bind:value={selectedModel}>
     {#each models as model}
     <option value={model.model}>{model.name}</option>
     {/each}
 </select>
 
-  
-
-  
 </div>
 
+<button onclick={newChat}>Create New Chat</button>
+<input bind:value={chatName}> 
 
 {#if messages[1]}
 <div class="messagesDiv mt-4">
@@ -177,6 +198,27 @@ async function sendPrompt(prompt) {
     text-align: right;
   
 }
+
+.leftMenu {
+    height: 95vh;
+    width: clamp(20rem, 20vw, 80vw);
+    background-color: rgb(58, 58, 58);
+    position: fixed;
+    left: 20px;
+    z-index: 2;
+    border-radius: 20px;
+    opacity: 1;
+    box-shadow:  0px 0px 20px 0px rgba(0, 0, 0, 0.405);
+    transition: 0.15s ease-in-out;
+    transform-origin: left;
+}
+
+.leftMenu.hiddenMenu {
+opacity: 0;
+
+transform: scaleX(0);
+}
+
 
 
 h2 {
