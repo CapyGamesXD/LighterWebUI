@@ -1,42 +1,9 @@
-# sv
+# LighterWebUI
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+LighterWebUI is a user-friendly interface for Ollama models. It's quick to set up, and uses only a few hundred megabytes of RAM. 
+I was inspired to make it when I tried running OpenWebUI + Ollama on my Raspberry Pi 5 4gb. It was... Not the greatest experience XD
 
-## Creating a project
+It worked, but super slowly, and had that 'one wrong click and it'll crash!' feeling about it. That's why I made LighterWebUI. 
 
-If you're seeing this, you've probably already done this step. Congrats!
-
-```sh
-# create a new project
-npx sv create my-app
-```
-
-To recreate this project with the same configuration:
-
-```sh
-# recreate this project
-bun x sv@0.16.1 create --template minimal --types ts --add prettier eslint tailwindcss="plugins:none" --install bun LighterWebUI
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
-
-```sh
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+To clarify, this is not a modified version of the existing OpenWebUI project, and is entirely separate, with no affiliation. 
+I removed some of the 'bloat' features that I never found myself using.

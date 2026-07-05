@@ -28,9 +28,10 @@ const stream = new ReadableStream({
 
 for await(const chunk of response) {
   if(chunk.message.content) {
-aiReply += chunk.message.content;
+      aiReply += chunk.message.content;
      c.enqueue(encoder.encode(chunk.message.content))
       }
+      
 
 }
 
