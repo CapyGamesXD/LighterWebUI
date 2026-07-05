@@ -2,29 +2,50 @@
  //@ts-nocheck
 import { json } from "@sveltejs/kit";
 import { onMount } from "svelte";
+import { ArrowUp, PanelLeft, PanelRight } from 'lucide-svelte';
 let models = $state();
 let selectedModel = $state();
 let replying = $state(false);
 let chatArray = $state([]);
-onMount(() => {
-    fetchModels();
-    getMessages();
+onMount(async () => {
+    const searchParams = new URLSearchParams(window.location.search) 
+    currentChatId = searchParams.get('chat') || '';
+    await fetchModels();
+    await getMessages();
+    await loadChats();
 })
+async function deleteChat(chatIndex) {
+    console.log("Deleting:", chatArray[chatIndex].name)
+}
 
-async function newChat() {
-    const response = await fetch('/API/database/newChat', {method: 'POST', body: JSON.stringify({userId, chatId, chatName})})
-    chatArray = response.json();
-    console.log(chatArray)
+async function newChat(chatName) {
+    if(chatName && userId) {
+        
+    const response = await fetch('/API/database/newChat', {method: 'POST', body: JSON.stringify({userId, chatName}), 
+    headers: {  
+            'Content-Type': 'application/json'
+        }})
+   const data = await response.json();
+   const newChatId = data.chatId;
+    window.location.replace(`/home?chat=${newChatId}`)
+    } else {
+        alert('Enter a valid chat name.')
+    }
 }
 
 async function loadChats() {
-    const response = await fetch('/API/database/fetchChats', {method: 'POST', body: JSON.stringify(userId)})
-    chatArray = response.json();
-    console.log(chatArray)
+    const response = await fetch('/API/database/fetchChats', {method: 'POST', body: JSON.stringify({userId}), headers: {  
+            'Content-Type': 'application/json'
+        }})
+    chatArray = await response.json();
+        chatArray = chatArray.reverse();
+    
 }
    
 async function fetchModels() {
-    const response = await fetch('/API/fetchModels', {method: 'POST'})
+    const response = await fetch('/API/fetchModels', {method: 'POST', headers: {  
+            'Content-Type': 'application/json'
+        }})
 
     models = await response.json();
     selectedModel = models[0].model;
@@ -36,16 +57,17 @@ let input = $state('');
 let reply = $state('');
 let messages = $state([])
 let controller;
-let systemPrompt = $state('You are an AI assistant. Be friendly and helpful')
+let systemPrompt = $state('You are an AI assistant.')
 let sideMenu = $state();
 let menuShown = $state(false)
 const userId = '34359';
-const chatId = 'chat-1'
-let chatName = $state('My Super Awesome Chat!');
+let currentChatId = $state('')
+let chatName = $state('');
 
 async function getMessages() {
-    const response = await fetch('/API/database/fetch', {
-        body: JSON.stringify({chatId, userId}), 
+    if(currentChatId) {
+        const response = await fetch('/API/database/fetch', {
+        body: JSON.stringify({currentChatId, userId}), 
         method: 'POST', 
         headers: {  
             'Content-Type': 'application/json'
@@ -54,15 +76,16 @@ async function getMessages() {
     });
     const reply = await response.json();
     messages = [{role: 'system', content: systemPrompt}, ...reply];
-
+    }
+    
 
 }
 
 async function storeMessages(role, text) {
-
+if(currentChatId) {
     try {
          const response = await fetch('/API/database', {
-        body: JSON.stringify({chatId, userId, role, text}), 
+        body: JSON.stringify({currentChatId, userId, role, text}), 
         method: 'POST', 
          headers: {  
             'Content-Type': 'application/json'
@@ -72,9 +95,11 @@ async function storeMessages(role, text) {
     } catch {
         console.log('Store Messages (storeMessages) function failed!')
     }
-   
-    
+} 
+
 }
+
+
 
 async function abort() {
     controller.abort();
@@ -129,18 +154,53 @@ async function sendPrompt(prompt) {
 <div class="centerdiv">
 <div class="leftMenu" class:hiddenMenu={!menuShown} bind:this={sideMenu}>
 
+<div class="closePanelFullExtent">
+  <h2>Chats:</h2>
+     <button onclick={() => {
+        menuShown = !menuShown;
+
+}}><PanelLeft></PanelLeft></button>
+</div>
+
+    
+  
+
+    <p>Name:</p>
+<input bind:value={chatName} placeholder="e.g, Capybara Olympics Pitch"> 
+<button onclick={() => {newChat(chatName)}} class="newChat">Create New Chat</button>
+
+<div class="divider"></div>
+{#if chatArray.length >= 1}
+{#each chatArray as chat}
+<button class="chatButton" onclick={() => {
+window.location.replace(`/home?chat=${chat.chatId}`)
+}}>
+    <p>{chat.title}</p>
+    
+</button>
+
+{/each}
+{:else}
+<p>No chats found, create one to get started!</p>
+{/if}
 </div>
 <div class="topBar">
+
+    {#if !menuShown}
+     <button onclick={() => {
+        menuShown = !menuShown;
+
+}}><PanelLeft></PanelLeft></button>
+{:else}
+<placeholder></placeholder>
+{/if}
 
   <p class="koulen text-xl">
         <a href="/lighterDoc" class="koulen">Lighter</a>
         <a href="/webDoc" class="koulen">Web</a> 
         <a href="/uiDoc" class="koulen">UI</a>
     </p>
-    <button onclick={() => {
-        menuShown = !menuShown;
-
-}}>=</button>
+   
 
 <select bind:value={selectedModel}>
     {#each models as model}
@@ -150,8 +210,8 @@ async function sendPrompt(prompt) {
 
 </div>
 
-<button onclick={newChat}>Create New Chat</button>
-<input bind:value={chatName}> 
+
+
 
 {#if messages[1]}
 <div class="messagesDiv mt-4">
@@ -174,16 +234,20 @@ async function sendPrompt(prompt) {
 </div>
 {/if}
 {#if !messages[1]}
+{#if currentChatId}
 <h1>Welcome back</h1>
+{:else}
+<h1>Open a chat to get started!</h1>
+<p>Click the button in the top left corner to open the chats menu.</p>
 {/if}
-
-
-
+{/if}
 
 <div class="bottom">
     <textarea bind:value={input}  placeholder="Why is the sky blue?"></textarea>
     {#if replying === false}
-<button onclick={() => sendPrompt(input.trim())}>+</button>
+<button onclick={() => sendPrompt(input.trim())}>
+    <ArrowUp></ArrowUp>
+</button>
 {:else}
 <button onclick={abort}>Abort</button>
 {/if}
@@ -194,6 +258,46 @@ async function sendPrompt(prompt) {
 </div>
 
 <style>
+.closePanelFullExtent {
+    width: 100%;
+    display: flex;
+
+    justify-content: space-between;
+    flex-direction: row;
+
+}
+.topBar > p {
+    position: absolute;
+    text-align: center;
+    left: 50%;
+    transform: translateX(-50%);
+}
+.chatButton {
+     width: 100%;
+    background-color: #2c2c2c;
+    text-align: center;
+    border-radius: 10px;
+    padding: 5px;
+}
+.divider {
+    height: 3px;
+    width: 100%;
+    background-color: rgb(74, 74, 74);
+    border-radius: 20px;
+}
+
+input {
+    width: 100%;
+    background-color: #191919;
+    text-align: center;
+    border-radius: 30px;
+}
+.newChat {
+        width: 100%;
+    background-color: #5a5a5a;
+    text-align: center;
+    border-radius: 30px;
+}
 .userSide {
     text-align: right;
   
@@ -211,11 +315,16 @@ async function sendPrompt(prompt) {
     box-shadow:  0px 0px 20px 0px rgba(0, 0, 0, 0.405);
     transition: 0.15s ease-in-out;
     transform-origin: left;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+ 
+padding: 10px 20px 10px 20px;
+
 }
 
 .leftMenu.hiddenMenu {
 opacity: 0;
-
 transform: scaleX(0);
 }
 
@@ -242,9 +351,7 @@ h2 {
     word-break:keep-all;
 
 }
-* {
-    outline: none;
-}
+
  .koulen {
      font-family: "koulen", sans-serif;
  }

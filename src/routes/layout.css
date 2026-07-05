@@ -31,6 +31,7 @@ img {
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
+    text-align: center;
     padding: 20px;
 
 }
