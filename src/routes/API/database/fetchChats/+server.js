@@ -5,8 +5,8 @@ export async function POST({request}) {
 const { userId } = await request.json()
     
     const snapshot = await db.ref(`${userId}/chats/`).get();
-    const val = snapshot.val() || {};
-    const chatsArray = Object.values(val);
+
+    const chatsArray = Object.values(snapshot.val() || {});
  
     return json(chatsArray);
 }

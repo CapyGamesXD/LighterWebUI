@@ -1,5 +1,7 @@
 @import 'tailwindcss';
 
+@source '../**/*.{html,js,ts,svelte}';
+
 body {
     background-color: #262626;
     color: #C2C2C2;
