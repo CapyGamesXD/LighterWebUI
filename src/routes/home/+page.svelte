@@ -2,26 +2,69 @@
  //@ts-nocheck
 import { json } from "@sveltejs/kit";
 import { onMount } from "svelte";
-import { ArrowUp, PanelLeft, PanelRight } from 'lucide-svelte';
+import { ArrowUp, PanelLeft, PanelRight, CircleX } from 'lucide-svelte';
+import { user } from "$lib/userState.js";
 let models = $state();
 let selectedModel = $state();
 let replying = $state(false);
 let chatArray = $state([]);
+let alertDialog = $state(false)
+let itemToDelete = $state([])
+let hiddenProfileMenu = $state(true);
+let userList = $state([{}]);
 onMount(async () => {
     const searchParams = new URLSearchParams(window.location.search) 
     currentChatId = searchParams.get('chat') || '';
-    await fetchModels();
+    await loadUserLists();
     await getMessages();
     await loadChats();
+    await fetchModels();
+   
+    currentUser = localStorage.getItem('previousUser') || user;
+
+    //TODO: Set the localStorage item when another user is selected.
 })
+
+function openAlert() {
+    alertDialog = true;
+    itemToDelete = chat;
+}
+
+
+function cancelDelete () {
+    alertDialog = false;
+    itemToDelete = [];
+}
+async function loadUserLists() {
+    try {
+    const response = await fetch('/API/database/fetchUserList', {method: 'POST'})
+    const data = await response.json();
+    console.log(data)
+    userList = data.userListArray;
+    } catch(error) {
+        console.error(error, 'In loadUserLists function')
+    }
+  
+
+}
 async function deleteChat(chatIndex) {
-    console.log("Deleting:", chatArray[chatIndex].name)
+    console.log("Deleting:", chatIndex)
+    
+
+    
+    const response = await fetch('/API/database/deleteChat', {method: 'POST', body: JSON.stringify({userId: user.userId, chat: chatIndex.chatId}), 
+    headers: {  
+            'Content-Type': 'application/json'
+        }})
+
+    loadChats();
+    alertDialog = false;
 }
 
 async function newChat(chatName) {
-    if(chatName && userId) {
+    if(chatName && user.userId) {
         
-    const response = await fetch('/API/database/newChat', {method: 'POST', body: JSON.stringify({userId, chatName}), 
+    const response = await fetch('/API/database/newChat', {method: 'POST', body: JSON.stringify({userId: user.userId, chatName}), 
     headers: {  
             'Content-Type': 'application/json'
         }})
@@ -34,11 +77,14 @@ async function newChat(chatName) {
 }
 
 async function loadChats() {
-    const response = await fetch('/API/database/fetchChats', {method: 'POST', body: JSON.stringify({userId}), headers: {  
+    const response = await fetch('/API/database/fetchChats', {method: 'POST', body: JSON.stringify({userId: currentUser.userId}), headers: {  
             'Content-Type': 'application/json'
         }})
     chatArray = await response.json();
         chatArray = chatArray.reverse();
+        if(chatArray.length < 1) {
+            currentChatId = '';
+        }
     
 }
    
@@ -58,16 +104,18 @@ let reply = $state('');
 let messages = $state([])
 let controller;
 let systemPrompt = $state('You are an AI assistant.')
-let sideMenu = $state();
+
 let menuShown = $state(false)
-const userId = '34359';
+
+let currentUser = $state({userName: 'Guest', userId: 'None', userPlainNum: 0})
+//This! This works by assigning the user profile details to this variable. That's what each button will do. :) Passing the parameter. This comment was made before I actually add that, so, heh, lil easter egg here :D
 let currentChatId = $state('')
 let chatName = $state('');
 
 async function getMessages() {
     if(currentChatId) {
         const response = await fetch('/API/database/fetch', {
-        body: JSON.stringify({currentChatId, userId}), 
+        body: JSON.stringify({currentChatId, userId: user.userId}), 
         method: 'POST', 
         headers: {  
             'Content-Type': 'application/json'
@@ -82,10 +130,10 @@ async function getMessages() {
 }
 
 async function storeMessages(role, text) {
-if(currentChatId) {
+if(currentChatId && user.userId) {
     try {
          const response = await fetch('/API/database', {
-        body: JSON.stringify({currentChatId, userId, role, text}), 
+        body: JSON.stringify({currentChatId, userId: user.userId, role, text}), 
         method: 'POST', 
          headers: {  
             'Content-Type': 'application/json'
@@ -152,8 +200,27 @@ async function sendPrompt(prompt) {
 
 </script>
 <div class="centerdiv">
-<div class="leftMenu" class:hiddenMenu={!menuShown} bind:this={sideMenu}>
+<div class="profileWindow" class:hiddenMenu={hiddenProfileMenu}>
+<h2>{currentUser.userName}</h2>
+{#each userList as userItem}
+<p>{userItem.userName}</p>
+{/each}
+</div>
+<div class="alert" class:hiddenMenu={!alertDialog}>
+    <h2>Are you sure you want to delete the selected chat?</h2>
+    <p>This action can not be undone.</p>
+    <div class="row" style="margin-top: 10px;">
+        <button class="yesButton" onclick={() => deleteChat(itemToDelete)}>Yes</button>
+        <button class="noButton" onclick={cancelDelete}>No</button>
+    </div>
+</div>
 
+<div class="leftMenu" class:hiddenMenu={!menuShown} >
+<select style="margin-top: 10px;" bind:value={selectedModel}>
+    {#each models as model}
+    <option value={model.model}>{model.name}</option>
+    {/each}
+</select>
 <div class="closePanelFullExtent">
   <h2>Chats:</h2>
      <button onclick={() => {
@@ -162,9 +229,6 @@ async function sendPrompt(prompt) {
 }}><PanelLeft></PanelLeft></button>
 </div>
 
-    
-  
-
     <p>Name:</p>
 <input bind:value={chatName} placeholder="e.g, Capybara Olympics Pitch"> 
 <button onclick={() => {newChat(chatName)}} class="newChat">Create New Chat</button>
@@ -172,12 +236,19 @@ async function sendPrompt(prompt) {
 <div class="divider"></div>
 {#if chatArray.length >= 1}
 {#each chatArray as chat}
-<button class="chatButton" onclick={() => {
+<div class="closePanelFullExtent">
+    <button class="chatButton" onclick={() => {
 window.location.replace(`/home?chat=${chat.chatId}`)
 }}>
     <p>{chat.title}</p>
-    
 </button>
+
+<button onclick={openAlert}>
+   <CircleX></CircleX> 
+</button>
+
+</div>
+
 
 {/each}
 {:else}
@@ -201,12 +272,12 @@ window.location.replace(`/home?chat=${chat.chatId}`)
         <a href="/uiDoc" class="koulen">UI</a>
     </p>
    
+<button onclick={() => {
+    hiddenProfileMenu = !hiddenProfileMenu;
+}}>
+    <img src="/guestIcon.png" class="pfp" alt="The guest's profile icon">
+</button>
 
-<select bind:value={selectedModel}>
-    {#each models as model}
-    <option value={model.model}>{model.name}</option>
-    {/each}
-</select>
 
 </div>
 
@@ -236,32 +307,84 @@ window.location.replace(`/home?chat=${chat.chatId}`)
 {#if !messages[1]}
 {#if currentChatId}
 <h1>Welcome back</h1>
+
 {:else}
 <h1>Open a chat to get started!</h1>
 <p>Click the button in the top left corner to open the chats menu.</p>
 {/if}
 {/if}
 
+  
+{#if chatArray[0]}
 <div class="bottom">
     <textarea bind:value={input}  placeholder="Why is the sky blue?"></textarea>
+    
     {#if replying === false}
 <button onclick={() => sendPrompt(input.trim())}>
     <ArrowUp></ArrowUp>
 </button>
+ 
 {:else}
 <button onclick={abort}>Abort</button>
+{/if}
+</div>  
 {/if}
 
 </div>
 
-
-</div>
-
 <style>
+.pfp {
+width: 28px;
+border: solid rgb(113, 120, 209) 3px;
+border-radius: 50%;
+image-rendering: optimizeQuality;
+}
+.yesButton, .noButton {
+    width: 60px;
+    height: 40px;
+    border-radius: 10px;
+    padding: 20px;
+    display: flex;
+    flex-direction: row;
+    text-align: center;
+    justify-content: center;
+    align-items: center;
+}
+
+.yesButton {
+    background-color: rgb(69, 121, 69);
+}
+.noButton {
+    background-color: rgb(146, 69, 69);
+}
+.row {
+     display: flex;
+    flex-direction: row;
+    text-align: center;
+    justify-content: center;
+    align-items: center;
+    gap: 50%;
+
+}
+.alert {
+    width: 400px;
+    height: 200px;
+    background-color: rgb(54, 54, 54);
+    border-radius: 20px;
+    position: fixed;
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    transition: 0.2s;
+
+}
 .closePanelFullExtent {
     width: 100%;
     display: flex;
-
+align-items: center;
     justify-content: space-between;
     flex-direction: row;
 
@@ -273,7 +396,7 @@ window.location.replace(`/home?chat=${chat.chatId}`)
     transform: translateX(-50%);
 }
 .chatButton {
-     width: 100%;
+     width: 90%;
     background-color: #2c2c2c;
     text-align: center;
     border-radius: 10px;
@@ -293,7 +416,7 @@ input {
     border-radius: 30px;
 }
 .newChat {
-        width: 100%;
+    width: 100%;
     background-color: #5a5a5a;
     text-align: center;
     border-radius: 30px;
@@ -313,7 +436,7 @@ input {
     border-radius: 20px;
     opacity: 1;
     box-shadow:  0px 0px 20px 0px rgba(0, 0, 0, 0.405);
-    transition: 0.15s ease-in-out;
+    transition: 0.15s ease-out;
     transform-origin: left;
     display: flex;
     flex-direction: column;
@@ -323,8 +446,38 @@ padding: 10px 20px 10px 20px;
 
 }
 
+.profileWindow {
+    height: 300px;
+    width: clamp(20rem, 20vw, 80vw);
+    background-color: rgb(58, 58, 58);
+    position: fixed;
+    right: 20px;
+    top: 60px;
+    z-index: 2;
+    border-radius: 20px;
+    opacity: 1;
+    box-shadow:  0px 0px 20px 0px rgba(0, 0, 0, 0.405);
+    transition: 0.2s ease-out;
+    transform-origin: right;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px 20px 10px 20px;
+
+}
+
+.profileWindow.hiddenMenu {
+    opacity: 0;
+transform: scaleX(0);
+}
+
 .leftMenu.hiddenMenu {
 opacity: 0;
+transform: scaleX(0);
+}
+
+.alert.hiddenMenu {
+    opacity: 0;
 transform: scaleX(0);
 }
 
@@ -333,7 +486,7 @@ transform: scaleX(0);
 h2 {
     font-size: 20px;
     font-weight: 500;
-    line-height: 2;
+    line-height: 1.5;
 }
 
 .messagesDiv {
@@ -393,5 +546,9 @@ h2 {
     justify-content: center;
     align-items: start;
     gap: 10px;
+ }
+
+ select {
+    background-color: #2c2c2c;
  }
 </style>

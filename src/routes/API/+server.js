@@ -17,7 +17,6 @@ export async function POST({ request }) {
 const stream = new ReadableStream({
   async start(c) {
     const encoder = new TextEncoder();
-
   
       const response = await ollama.chat({
   model: selectedModel,
