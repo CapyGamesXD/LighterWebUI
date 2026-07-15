@@ -1,3 +1,3 @@
 import { writable } from 'svelte/store';
 
-export let user = writable('');
+export const user = writable({userName: 'Guest', userPlainNum: 0, userId: null});
