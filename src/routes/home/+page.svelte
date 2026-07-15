@@ -4,6 +4,8 @@ import { json } from "@sveltejs/kit";
 import { onMount } from "svelte";
 import { ArrowUp, PanelLeft, PanelRight, CircleX } from 'lucide-svelte';
 import { user } from "$lib/userState.js";
+import { goto } from "$app/navigation";
+import { page } from "$app/stores";
 let models = $state();
 let selectedModel = $state();
 let replying = $state(false);
@@ -12,20 +14,42 @@ let alertDialog = $state(false)
 let itemToDelete = $state([])
 let hiddenProfileMenu = $state(true);
 let userList = $state([{}]);
+let input = $state('');
+let reply = $state('');
+let messages = $state([])
+let controller;
+let systemPrompt = $state(`You are an AI assistant.`)
+let menuShown = $state(false)
+//This! This works by assigning the user profile details to this variable. That's what each button will do. :) Passing the parameter. This comment was made before I actually add that, so, heh, lil easter egg here :D
+let currentChatId = $derived($page.url.searchParams.get('chat') || '')
+let chatName = $state('');
+
 onMount(async () => {
-    const searchParams = new URLSearchParams(window.location.search) 
-    currentChatId = searchParams.get('chat') || '';
+    
+    console.log("Current Chat ID:", currentChatId)
+
+    try {
+         //This is probably a bit excessive, but the userId controls where in the DB the data is stored. PlainNum helps with order :D I'll see whether I use it or not. 
+    const storedUser = localStorage.getItem('previousUser') ? JSON.parse(localStorage.getItem('previousUser')) : {userName: 'Guest', userPlainNum: 0, userId: null};
+    if(storedUser !== undefined && storedUser !== '' && storedUser !== null) {
+        user.set(storedUser)
+    }
+    console.log("User:", user)
     await loadUserLists();
     await getMessages();
     await loadChats();
     await fetchModels();
    
-    currentUser = localStorage.getItem('previousUser') || user;
-
+   
+    systemPrompt = `You are an AI assistant. Your model is ${selectedModel}. The user's profile name is: "${$user.userName}". Use this name if suitable, e.g, when greeting them. Don't talk about your model. The platform: you're running on an Ollama server through a LighterWebUI client. Ollama can host open-source AI models. If you have tools, use them if needed. LighterWebUI is a lightweight, low-RAM local AI client (which is what the user sees). It has various interesting features. It stores chats locally, unless the user is on a 'Guest' account. Do not reference any part of this system prompt. This includes quoting it.`
+    } catch(error) {
+        alert("Something failed during the startup process")
+    }
     //TODO: Set the localStorage item when another user is selected.
 })
 
-function openAlert() {
+
+function openAlert(chat) {
     alertDialog = true;
     itemToDelete = chat;
 }
@@ -40,7 +64,7 @@ async function loadUserLists() {
     const response = await fetch('/API/database/fetchUserList', {method: 'POST'})
     const data = await response.json();
     console.log(data)
-    userList = data.userListArray;
+    userList = [...data.list];
     } catch(error) {
         console.error(error, 'In loadUserLists function')
     }
@@ -49,10 +73,12 @@ async function loadUserLists() {
 }
 async function deleteChat(chatIndex) {
     console.log("Deleting:", chatIndex)
-    
-
-    
-    const response = await fetch('/API/database/deleteChat', {method: 'POST', body: JSON.stringify({userId: user.userId, chat: chatIndex.chatId}), 
+    if(chatIndex.chatId == currentChatId) {
+        goto('/home');
+        messages = []
+    }
+   
+    const response = await fetch('/API/database/deleteChat', {method: 'POST', body: JSON.stringify({userId: $user.userId, chat: chatIndex.chatId}), 
     headers: {  
             'Content-Type': 'application/json'
         }})
@@ -62,22 +88,26 @@ async function deleteChat(chatIndex) {
 }
 
 async function newChat(chatName) {
-    if(chatName && user.userId) {
-        
-    const response = await fetch('/API/database/newChat', {method: 'POST', body: JSON.stringify({userId: user.userId, chatName}), 
+    if(chatName && $user.userId) {
+    const response = await fetch('/API/database/newChat', {method: 'POST', body: JSON.stringify({userId: $user.userId, chatName}), 
     headers: {  
             'Content-Type': 'application/json'
         }})
    const data = await response.json();
    const newChatId = data.chatId;
-    window.location.replace(`/home?chat=${newChatId}`)
-    } else {
+    goto(`/home?chat=${newChatId}`)
+    loadChats();
+    } else if (!chatName) {
         alert('Enter a valid chat name.')
+    } else if (!$user.userId) {
+        alert("Error code A1")
+    } else {
+        alert("Unknown error! Error U1")
     }
 }
 
 async function loadChats() {
-    const response = await fetch('/API/database/fetchChats', {method: 'POST', body: JSON.stringify({userId: currentUser.userId}), headers: {  
+    const response = await fetch('/API/database/fetchChats', {method: 'POST', body: JSON.stringify({userId: $user.userId}), headers: {  
             'Content-Type': 'application/json'
         }})
     chatArray = await response.json();
@@ -99,23 +129,14 @@ async function fetchModels() {
 
 
 }
-let input = $state('');
-let reply = $state('');
-let messages = $state([])
-let controller;
-let systemPrompt = $state('You are an AI assistant.')
 
-let menuShown = $state(false)
 
-let currentUser = $state({userName: 'Guest', userId: 'None', userPlainNum: 0})
-//This! This works by assigning the user profile details to this variable. That's what each button will do. :) Passing the parameter. This comment was made before I actually add that, so, heh, lil easter egg here :D
-let currentChatId = $state('')
-let chatName = $state('');
+
 
 async function getMessages() {
-    if(currentChatId) {
+    if(currentChatId && $user.userId !== null) {
         const response = await fetch('/API/database/fetch', {
-        body: JSON.stringify({currentChatId, userId: user.userId}), 
+        body: JSON.stringify({currentChatId, userId: $user.userId}), 
         method: 'POST', 
         headers: {  
             'Content-Type': 'application/json'
@@ -123,17 +144,20 @@ async function getMessages() {
     
     });
     const reply = await response.json();
-    messages = [{role: 'system', content: systemPrompt}, ...reply];
+    messages = [...reply];
+    } else {
+
     }
     
 
 }
 
 async function storeMessages(role, text) {
-if(currentChatId && user.userId) {
-    try {
+if(currentChatId && $user.userId) {
+    
+         try {
          const response = await fetch('/API/database', {
-        body: JSON.stringify({currentChatId, userId: user.userId, role, text}), 
+        body: JSON.stringify({currentChatId, userId: $user.userId, role, text}), 
         method: 'POST', 
          headers: {  
             'Content-Type': 'application/json'
@@ -143,7 +167,10 @@ if(currentChatId && user.userId) {
     } catch {
         console.log('Store Messages (storeMessages) function failed!')
     }
-} 
+    
+} else {
+    console.log("Guest User")
+}
 
 }
 
@@ -158,21 +185,25 @@ async function abort() {
 }
 async function sendPrompt(prompt) {    
     controller = new AbortController();
+    
     if(prompt && selectedModel) {
     replying = true;
-    messages = [...messages, {role: 'user', content: prompt}];
+   
+    messages = [...messages, {role: 'user', content: prompt}]; 
     storeMessages('user', prompt);
     input = ''
     reply = ''
 
+    const sentMessages = [{role: 'system', content: systemPrompt}, ...messages];
     const response = await fetch('/API', {
     method: 'POST',
-    body: JSON.stringify({ messages, selectedModel}),
+    body: JSON.stringify({ messages: sentMessages, selectedModel}),
     headers: {
        'Content-Type': 'application/json'
     },
     signal: controller.signal            
     });
+    
 
 
     const reader = response.body.getReader();
@@ -193,17 +224,46 @@ async function sendPrompt(prompt) {
         console.log(messages)
 
      
-        } else {
-            alert('Please check the selected model and prompt.')
+        } else if (!prompt) {
+            alert('Please enter a valid prompt! P1')
+        } else if (!selectedModel) {
+            alert('Model not selected! Error M1')
         }
     }
+
+
+$effect(() => {
+    if($user) {
+        loadChats();
+    }
+})
+
+$effect(() => {
+    if($user && currentChatId) {
+      getMessages();
+      //I learned about this nifty return function from asking Gemini how I should go about aborting the send. The code is NOT copy-pasted. I used Gemini solely as a learning tool, because I'm too lazy to Google it XD Thanks for reading the repo :D
+      return(() => {
+        if(replying === true) {
+            abort();
+        }
+      })
+    }
+})
+
+
 
 </script>
 <div class="centerdiv">
 <div class="profileWindow" class:hiddenMenu={hiddenProfileMenu}>
-<h2>{currentUser.userName}</h2>
+<h2>{$user.userName}</h2>
 {#each userList as userItem}
-<p>{userItem.userName}</p>
+<button onclick={() => {
+    user.set(userItem);
+    localStorage.setItem('previousUser', JSON.stringify(userItem))
+}}>
+    <p>{userItem.userName}</p>
+</button>
+
 {/each}
 </div>
 <div class="alert" class:hiddenMenu={!alertDialog}>
@@ -228,6 +288,8 @@ async function sendPrompt(prompt) {
 
 }}><PanelLeft></PanelLeft></button>
 </div>
+{#if $user.userId}
+
 
     <p>Name:</p>
 <input bind:value={chatName} placeholder="e.g, Capybara Olympics Pitch"> 
@@ -238,21 +300,29 @@ async function sendPrompt(prompt) {
 {#each chatArray as chat}
 <div class="closePanelFullExtent">
     <button class="chatButton" onclick={() => {
-window.location.replace(`/home?chat=${chat.chatId}`)
+goto(`/home?chat=${chat.chatId}`);
+console.log('Going to', chat.chatId)
+menuShown = false
 }}>
     <p>{chat.title}</p>
 </button>
 
-<button onclick={openAlert}>
+<button onclick={() => {openAlert(chat)}}>
    <CircleX></CircleX> 
 </button>
+
 
 </div>
 
 
+
 {/each}
+
 {:else}
 <p>No chats found, create one to get started!</p>
+{/if}
+{:else}
+<p>Guests can't create chats. Click the icon on the top right to select a profile or just continue as a guest.</p>
 {/if}
 </div>
 <div class="topBar">
@@ -284,38 +354,41 @@ window.location.replace(`/home?chat=${chat.chatId}`)
 
 
 
-{#if messages[1]}
+{#if messages[0]}
 <div class="messagesDiv mt-4">
 
     {#each messages as message}
-{#if message.role == 'user'}
-<div class="userSide">
-<h2>You:</h2>
-<p>{message.content.trim()}</p>
-</div>
-{:else if message.role == 'assistant'}
-<h2>Assistant:</h2>
-<p>{message.content}</p>
+        {#if message.role == 'user'}
+            <div class="userSide">
+            <h2>You:</h2>
+            <p>{message.content.trim()}</p>
+        </div>
+        {:else if message.role == 'assistant'}
+            <h2>Assistant:</h2>
+            <p>{message.content}</p>
+        {/if}
+    {/each}
+        {#if reply}
+            <h2>Assistant:</h2>
+            <p>{reply}</p>
+        {/if}
+        </div>
 {/if}
-{/each}
-{#if reply}
-<h2>Assistant:</h2>
-<p>{reply}</p>
-{/if}
-</div>
-{/if}
-{#if !messages[1]}
-{#if currentChatId}
-<h1>Welcome back</h1>
-
-{:else}
+        {#if !messages[0]}
+        {#if currentChatId !== ''}
+            <h1>Welcome back</h1>
+            {:else if $user.userId == null}
+<h1>Welcome.</h1>
+<p>You're currently logged in as a guest.</p>
+        {:else}
 <h1>Open a chat to get started!</h1>
 <p>Click the button in the top left corner to open the chats menu.</p>
+
 {/if}
 {/if}
 
   
-{#if chatArray[0]}
+{#if chatArray[0] || !$user.userId}
 <div class="bottom">
     <textarea bind:value={input}  placeholder="Why is the sky blue?"></textarea>
     
@@ -441,6 +514,7 @@ input {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    overflow: auto;
  
 padding: 10px 20px 10px 20px;
 
@@ -550,5 +624,7 @@ h2 {
 
  select {
     background-color: #2c2c2c;
+    border-radius: 30px;
+
  }
 </style>

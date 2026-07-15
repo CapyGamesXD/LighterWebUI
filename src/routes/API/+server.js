@@ -10,7 +10,7 @@ function testTools() {
 
 export async function POST({ request }) {
   
-  const{ messages, selectedModel } = await request.json();
+  const{ messages, selectedModel} = await request.json();
 
 
   let aiReply = '';
@@ -41,6 +41,6 @@ console.log(messages)
  
 
 return new Response(stream)
-    
+
 }
   
