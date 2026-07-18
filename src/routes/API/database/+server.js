@@ -5,9 +5,14 @@ import { db } from '$lib/database.js'
 
 
 export async function POST({request}) {
-    const { currentChatId, role, text, userId } = await request.json()
+    const { currentChatId, userId, messages } = await request.json()
     
-    await db.ref(`${userId}/chats/${currentChatId}/messages/`).push({role: role, content: text })
+    try {
+    await db.ref(`${userId}/chats/${currentChatId}/messages/`).set(messages)
+    } catch (e) {
+        console.error("ERROR!", e)
+    }
+    
 
     return json({status: 200})
 }

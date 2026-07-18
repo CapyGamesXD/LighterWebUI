@@ -8,7 +8,8 @@ node_modules
 /.svelte-kit
 /build
 .acebase
-.db
+
+data.db
 # OS
 .DS_Store
 Thumbs.db
