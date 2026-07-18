@@ -8,7 +8,7 @@ const snapshot = await db.ref(`/lighterwebui/users`).get();
 let list = snapshot.val() || [];
 
 if(list[0] == null || list[0] == undefined) {
-    list = [{userName: 'User 1', userId: '1'}]
+    list = [{userName: "Guest", userId: null},{userName: 'User 1', userId: '1'}]
 }
 
 return json({list})

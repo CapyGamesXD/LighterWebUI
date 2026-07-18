@@ -1,7 +1,8 @@
 //@ts-nocheck
 import { json } from "@sveltejs/kit";
-import ollama from 'ollama'
-import { encode } from "punycode";
+import { ollama } from 'ollama-ai-provider-v2';
+import { z } from 'zod';
+import {tool, streamText, convertToModelMessages, stepCountIs } from 'ai';
 
 function testTools() {
   return Math.random()
@@ -10,37 +11,30 @@ function testTools() {
 
 export async function POST({ request }) {
   
-  const{ messages, selectedModel} = await request.json();
+  const{ messages, selectedModel, systemPrompt} = await request.json();
 
 
   let aiReply = '';
-const stream = new ReadableStream({
-  async start(c) {
-    const encoder = new TextEncoder();
-  
-      const response = await ollama.chat({
-  model: selectedModel,
-  messages: messages,
-  stream: true,
+      const response = streamText({
+  model: ollama(selectedModel),
+  messages: await convertToModelMessages(messages),
+  stopWhen: stepCountIs(5),
+  system: systemPrompt,
+  tools: {
+    testTools: tool({
+      description: 'Test if tool calling is working',
+      inputSchema: z.object({}),
+      execute: async () => ({
+        response: 'Tool calling is working!'
+      }),
+    }),
+  },
 
-      })
 
-for await(const chunk of response) {
-  if(chunk.message.content) {
-      aiReply += chunk.message.content;
-     c.enqueue(encoder.encode(chunk.message.content))
-      }
-      
+})
 
-}
+return response.toUIMessageStreamResponse();
 
-console.log(messages)
-    c.close();
   }
-}) 
- 
 
-return new Response(stream)
-
-}
   
