@@ -1,10 +1,18 @@
 //@ts-nocheck
 import { json } from '@sveltejs/kit'
+import { db } from '$lib/database.js'
+import { ur } from 'zod/locales';
 
 export async function POST({ request } ) {
-    const response = await fetch('http://localhost:11434/api/tags');
+try {
+    const snapshot = await db.ref('/site/APIRoute').get();
+    const url = snapshot.val() ? snapshot.val() : 'http://localhost:11434/api';
+         const response = await fetch(`${url}/tags`);
     const reply = await response.json();
     const models = reply.models;
-   
-    return json(models);
+    return json(models);   
+} catch (e) {
+ console.error(e)   
+}
+    
 }
