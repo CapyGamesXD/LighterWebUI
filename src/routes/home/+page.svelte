@@ -2,7 +2,7 @@
  //@ts-nocheck
 import { json } from "@sveltejs/kit";
 import { onMount, untrack } from "svelte";
-import { ArrowUp, PanelLeft, PanelRight, CircleX, Settings, GlobeOff } from 'lucide-svelte';
+import { ArrowUp, PanelLeft, PanelRight, CircleX, Settings, GlobeOff, Wrench } from 'lucide-svelte';
 import { user } from "$lib/userState.js";
 import { goto } from "$app/navigation";
 import { page } from "$app/stores";
@@ -10,6 +10,7 @@ import { Chat } from '@ai-sdk/svelte'
 import { DefaultChatTransport } from 'ai';
 import { marked } from "marked";
 import hljs from 'highlight.js';
+
 
 
 let settingsMenu = $state(false)
@@ -27,18 +28,21 @@ let controller;
 let systemPrompt = $state(`You are an AI assistant.`)
 let menuShown = $state(false)
 let tavilyAPIKey = $state('');
-let apiRoute = $state('');
+let apiRoute = $state('https://ollama.com/api');
 let enteredAPIKey = $state('');
 let passwordEntered = $state('');
 let overrideModel = $state('');
 let errorMessage = $state('')
+let routeSelect = $state('Ollama Cloud')
 //This! This works by assigning the user profile details to this variable. That's what each button will do. :) Passing the parameter. This comment was made before I actually add that, so, heh, lil easter egg here :D
 let currentChatId = $derived($page.url.searchParams.get('chat') || '')
 marked.setOptions({
-  highlight: (code) => hljs.highlightAuto(code).value
+    highlight: (code) => hljs.highlightAuto(code).value
 });
 let chatName = $state('');
   let input = $state('');
+let userPrompt = $state('')
+
   const chat = $state(new Chat({
     transport: new DefaultChatTransport({
     api: '/API',
@@ -53,21 +57,40 @@ onFinish: async (message) => {
     await storeMessages();
 },
 
-onError: (error) => {
+onError: async (error) => {
     errorMessage = error.message || "An unexpected error occurred";
+    if(selectedModel !== 'gemma4:31b' && models.some(m => m.model === 'gemma4:31b')) {
+            errorMessage = 'An error occured. Retrying with another model...'
+            selectedModel = 'gemma4:31b'
+            setTimeout(async () => {
+                chat.messages.pop();
+                input = userPrompt;
+            await sendPrompt(input);
+            errorMessage = '';
+            userPrompt = '';
+           
+            }, 1250);
+            
+        } else {
+            errorMessage = 'An unexpected error occured. Please select another model or try again later.'
+        }
 }}));
 
   async function sendPrompt(userInput) {
-    if(userInput) {
-        errorMessage = ''
-try {
-    await chat.sendMessage({ text: userInput });
-} catch (e) {
-errorMessage = e.message || "An unexpected error occurred."
-}   
-    } else {
-        alert("Check prompt!")
+    if(!userInput) {
+        alert("Please enter a valid prompt.")
+        return;
     }
+
+    userPrompt = userInput;
+    input = '';
+    errorMessage = '';
+ 
+    try {
+        await chat.sendMessage({ text: userPrompt });
+    } catch (e) {
+        input = userPrompt
+    } 
 
   }
 
@@ -76,9 +99,9 @@ onMount(async () => {
     console.log("Current Chat ID:", currentChatId)
 
     tavilyAPIKey = localStorage.getItem('tavilyAPIKey') || '';
-    selectedModel = localStorage.getItem("selectedModel");
-    apiRoute = localStorage.getItem('apiRoute');
-
+    selectedModel = localStorage.getItem("selectedModel") || '';
+    apiRoute = localStorage.getItem('apiRoute') || '';
+    routeSelect = localStorage.getItem('routeSelect') || 'Ollama Cloud'
     overrideModel = localStorage.getItem('overrideModel')
 
     if(currentChatId) {
@@ -99,7 +122,8 @@ onMount(async () => {
  try {
     await fetchModels();
    
-    systemPrompt = "You are an AI assistant. Use tools when prompted to by the user, or when you feel they're suitable. If you use a tool, say beforehand that you're using one. Use text formatting as needed. For code, use only ``` [code goes here] ```, NEVER plain text."
+    systemPrompt = "You are an AI assistant. Use tools when prompted to by the user, or when you feel they're suitable. If you use a tool, say beforehand that you're using one. CRITICAL INSTRUCTIONS: When writing code snippets, scripts, or terminal commands, ALWAYS use proper Markdown syntax. ALL code must be enclosed by three backticks followed by the language identifier. Example: ```python \n print('hello world') \n ```. NEVER output code without these backticks, as this will break the frontend."
+
     } catch(error) {
         alert("Something went wrong during the startup process!")
     }
@@ -165,7 +189,9 @@ async function saveSettings () {
 
 
         if(await response.json() === false) {
-            alert("Incorrect password")
+            alert("Incorrect password, operation failed.")
+            apiRoute = '';
+            enteredAPIKey = '';
         } else {
             console.log("Save worked!")
         }
@@ -303,8 +329,6 @@ $effect(() => {
 
 $effect(() => {
     if($user && currentChatId) {
-
-      //I learned about this nifty return function from asking Gemini how I should go about aborting the send. The code is NOT copy-pasted. I used Gemini solely as a learning tool, because I'm too lazy to Google it XD Thanks for reading the repo :D
       return(() => {
         if(isLoading === true) {
             abort();
@@ -312,10 +336,7 @@ $effect(() => {
       })
     }
 })
-$effect(() => {
-    chat.messages;
-    console.log(chat.messages)
-})
+
 
 $effect(() => {
 if(currentChatId) {
@@ -326,9 +347,26 @@ untrack(() => {
 })
 
 
-</script>
-<div class="centerdiv">
+$effect(() => {
+    routeSelect;
+    if(routeSelect === "Ollama Local") {
+        apiRoute = 'http://localhost:11434/api';
+    } else if(routeSelect === "Ollama Cloud") {
+        apiRoute = "https://ollama.com/api";
+    } else {
+        apiRoute = '';
+    }
+    localStorage.setItem('routeSelect', routeSelect);
+})
 
+
+
+
+
+</script>
+
+
+<div class="centerdiv">
     <div class="settingsMenu" class:hiddenMenu={!settingsMenu}>
         <h2>Settings:</h2>
         <p style="margin-top: 10px;">Tavily API Key (web search)</p>
@@ -337,12 +375,20 @@ untrack(() => {
         <input bind:value={overrideModel} placeholder="E.g, Llama3.2:3B">
         <div class="divider"></div>
         <h2>Advanced Settings</h2>
+        <p>An administrator password is needed to change the following settings.</p>
         <p style="margin-top: 10px;">Password</p>
      <input bind:value={passwordEntered} type="password" placeholder="E.g, ABC123">
 
-        <p>AI completion route (connection endpoint)</p>
-        <input bind:value={apiRoute} placeholder="https://...">
-        {#if apiRoute}
+        <p>AI completion endpoint (Ollama cloud/local recommended)</p>
+        <select bind:value={routeSelect}>
+            <option value="Ollama Local">Default Ollama Local</option>
+            <option value="Ollama Cloud">Default Ollama Cloud</option>
+            <option value="Custom">Custom</option>
+        </select>
+        {#if routeSelect === 'Custom'}
+        <input bind:value={apiRoute} placeholder="http://localhost:11434/api">
+        {/if}
+        {#if !apiRoute.startsWith('http://localhost')}
         <p>API key (if applicable)</p>
         <input bind:value={enteredAPIKey} type="password">
         {/if}
@@ -401,17 +447,17 @@ untrack(() => {
 
 <div class="divider"></div>
 {#if chatArray.length >= 1}
-{#each chatArray as chat}
+{#each chatArray as chatItem}
 <div class="closePanelFullExtent">
     <button class="chatButton" onclick={() => {
-goto(`/home?chat=${chat.chatId}`);
-console.log('Going to', chat.chatId)
+goto(`/home?chat=${chatItem.chatId}`);
+console.log('Going to', chatItem.chatId)
 menuShown = false
 }}>
-    <p>{chat.title}</p>
+    <p>{chatItem.title}</p>
 </button>
 
-<button onclick={() => {openAlert(chat)}}>
+<button onclick={() => {openAlert(chatItem)}}>
    <CircleX></CircleX> 
 </button>
 
@@ -436,7 +482,6 @@ menuShown = false
 {/if}
 </div>
 <div class="topBar">
-
     {#if !menuShown}
      <button onclick={() => {
         menuShown = !menuShown;
@@ -467,7 +512,7 @@ menuShown = false
 
 {#if errorMessage}
 <div class="error">
-     <p style="text-align: center;">{errorMessage} Please try another model (E.g, Gemma4:31B)</p>
+     <p style="text-align: center;">{errorMessage}</p>
 </div>
 
   {/if}
@@ -475,6 +520,7 @@ menuShown = false
 <div class="messagesDiv mt-4">
  
     {#each chat.messages as message}
+   
  
         {#if message.role == 'user'}
             <div class="userSide">
@@ -487,10 +533,17 @@ menuShown = false
             {/each}
             {/if}
         </div>
+        
         {:else if message.role == 'assistant'}
             <h2>Assistant:</h2>
 
            {#each message.parts as part}
+
+    {#if part.type.startsWith('tool-')}
+    <Wrench style='color: white;' size=30></Wrench>
+    <p>Tool used: {part.type.slice(5)}</p>
+    {/if}
+
             {#if part.type === 'text'}
             <div class="markedDiv">
                 {@html marked(part.text)}
@@ -498,6 +551,7 @@ menuShown = false
             
             {/if}
             {/each}
+            
         {/if}
     {/each}
         </div>
@@ -520,7 +574,7 @@ menuShown = false
 {#if currentChatId || $user.userId == null}
 <div class="bottom">
 {#if !tavilyAPIKey}
-<button class="lilButton" onclick={alert('Web search API key is invalid or not found. Please enter in settings to enable web search functionality')}>
+<button class="lilButton" onclick={() => alert('Web search API key is invalid or not found. Please enter in settings to enable web search functionality')}>
 <GlobeOff size=20></GlobeOff>
 </button>
 {/if}
@@ -587,8 +641,9 @@ menuShown = false
 
 .settingsMenu {
 opacity: 1;
-width: 300px;
-height: 80%;
+box-shadow: 0px 4px 20px 10px rgba(0, 0, 0, 0.384);
+height: auto;
+width: clamp(25rem, 30vw, 40rem);
 padding: 20px;
 gap: 10px;
 display: flex;
@@ -654,6 +709,13 @@ image-rendering: optimizeQuality;
     padding: 20px;
     transition: 0.2s;
 
+}
+.markedDiv :global(pre) {
+    background-color: #282c34;
+    padding: 15px;
+    margin-top: 15px;
+    margin-bottom: 15px;
+    border-radius: 20px;
 }
 .markedDiv :global(hr) {
 height: 3px;

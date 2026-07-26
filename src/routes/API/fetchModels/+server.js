@@ -6,7 +6,7 @@ import { ur } from 'zod/locales';
 export async function POST({ request } ) {
 try {
     const snapshot = await db.ref('/site/APIRoute').get();
-    const url = snapshot.val() ? snapshot.val() : 'http://localhost:11434/api';
+    const url = snapshot.val() ? snapshot.val() : 'http://ollama.com/api';
          const response = await fetch(`${url}/tags`);
     const reply = await response.json();
     const models = reply.models;
