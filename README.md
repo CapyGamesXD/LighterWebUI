@@ -1,6 +1,9 @@
 # LighterWebUI
 
-LighterWebUI is a user-friendly interface for Ollama models. It's quick to set up and (according to my tests) uses far less RAM than OpenWebUI at idle.
+LighterWebUI is a user-friendly interface for Ollama models. It's quick to set up and (according to my tests) uses under 100MB of RAM at idle.
+
+With 10 browser tabs of the site open, it went up to 105MB. 
+
 I was inspired to make it when I tried running OpenWebUI + Ollama on my Raspberry Pi 5 4gb. It was... Not the greatest experience XD
 
 It worked, but super slowly, and had that 'one wrong click and it'll crash!' feeling about it. That's why I made LighterWebUI.
