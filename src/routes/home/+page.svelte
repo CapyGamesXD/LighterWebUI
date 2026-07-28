@@ -1,7 +1,7 @@
 <script>
  //@ts-nocheck
 import { json } from "@sveltejs/kit";
-import { onMount, untrack } from "svelte";
+import { onMount, untrack, tick } from "svelte";
 import { ArrowUp, PanelLeft, PanelRight, CircleX, Settings, GlobeOff, Wrench } from 'lucide-svelte';
 import { user } from "$lib/userState.js";
 import { goto } from "$app/navigation";
@@ -11,8 +11,10 @@ import { DefaultChatTransport } from 'ai';
 import { marked } from "marked";
 import hljs from 'highlight.js';
 
-
-
+let settingsPage = $state(1)
+let newUserWindow = $state(false)
+let loadingSite = $state(true)
+let retryModel = $state('gemma4:31b')
 let settingsMenu = $state(false)
 let models = $state();
 let selectedModel = $state();
@@ -40,8 +42,26 @@ marked.setOptions({
     highlight: (code) => hljs.highlightAuto(code).value
 });
 let chatName = $state('');
-  let input = $state('');
+let input = $state('');
 let userPrompt = $state('')
+let newUserName = $state('');
+async function newUser() {
+    if(newUserName) {
+    const response = await fetch('/API/database/newUser', {method: 'POST', body: JSON.stringify({newUserName}), 
+    headers: {  
+            'Content-Type': 'application/json'
+        }})
+    const data = await response.json();
+    userList = [...data.list];
+
+    newUserWindow = false;
+    newUserName = '';
+    userList = data.list;
+    } else if (!newUserName) {
+        alert('Enter a valid username.')
+    }
+}
+
 
   const chat = $state(new Chat({
     transport: new DefaultChatTransport({
@@ -50,16 +70,24 @@ let userPrompt = $state('')
          selectedModel,
          systemPrompt,
          tavilyAPIKey,
-         userId: $user.userId
+         userId: $user.userId,
+         currentChatId
     })
   }),
 onFinish: async (message) => {
     await storeMessages();
+    if(chat.messages[chat.messages.length - 1].parts.find(p => p.type === 'tool-endChat')) {
+        errorMessage = "Chat has been ended due to a rule violation."
+        chatArray = chatArray.filter(c => c.chatId !== currentChatId);
+        await loadChats();
+        goto('/home');
+        
+    }
 },
 
 onError: async (error) => {
     errorMessage = error.message || "An unexpected error occurred";
-    if(selectedModel !== 'gemma4:31b' && models.some(m => m.model === 'gemma4:31b')) {
+    if(selectedModel !== retryModel && models.some(m => m.model === retryModel)) {
             errorMessage = 'An error occured. Retrying with another model...'
             selectedModel = 'gemma4:31b'
             setTimeout(async () => {
@@ -69,44 +97,62 @@ onError: async (error) => {
             errorMessage = '';
             userPrompt = '';
            
-            }, 1250);
+            }, 1500);
             
         } else {
             errorMessage = 'An unexpected error occured. Please select another model or try again later.'
         }
 }}));
-
+let autoScroll = $state(true)
+function handleScrolling (e) {
+const node = e.target;
+const autoScrollSuitable = node.scrollHeight - node.scrollTop - node.clientHeight < 25;
+autoScroll = autoScrollSuitable;
+}
   async function sendPrompt(userInput) {
     if(!userInput) {
         alert("Please enter a valid prompt.")
         return;
     }
 
+
     userPrompt = userInput;
     input = '';
     errorMessage = '';
+    scrollToBottom(element);
  
     try {
         await chat.sendMessage({ text: userPrompt });
+        scrollToBottom(element);
     } catch (e) {
         input = userPrompt
     } 
-
   }
 
-onMount(async () => {
+  let element = $state();
+//Some lovely SvelteKit documentation code!
+  onMount(() => scrollToBottom(element))
+
+  const scrollToBottom = async (node) => {
+    if(autoScroll) {
+         await tick();
+         if(node) {
+            node.scroll({ top: node.scrollHeight, behavior: 'smooth' });
+         }
     
+    }
+   
+  }; 
+onMount(async () => {
+    loadingSite = true;
     console.log("Current Chat ID:", currentChatId)
 
     tavilyAPIKey = localStorage.getItem('tavilyAPIKey') || '';
     selectedModel = localStorage.getItem("selectedModel") || '';
     apiRoute = localStorage.getItem('apiRoute') || '';
-    routeSelect = localStorage.getItem('routeSelect') || 'Ollama Cloud'
-    overrideModel = localStorage.getItem('overrideModel')
-
-    if(currentChatId) {
-    getMessages();
-}
+    routeSelect = localStorage.getItem('routeSelect') || 'Ollama Cloud';
+    overrideModel = localStorage.getItem('overrideModel');
+    retryModel = localStorage.getItem('retryModel') || 'gemma4:31b';
     
     try {
          //This is probably a bit excessive, but the userId controls where in the DB the data is stored. PlainNum helps with order :D I'll see whether I use it or not. 
@@ -122,12 +168,17 @@ onMount(async () => {
  try {
     await fetchModels();
    
-    systemPrompt = "You are an AI assistant. Use tools when prompted to by the user, or when you feel they're suitable. If you use a tool, say beforehand that you're using one. CRITICAL INSTRUCTIONS: When writing code snippets, scripts, or terminal commands, ALWAYS use proper Markdown syntax. ALL code must be enclosed by three backticks followed by the language identifier. Example: ```python \n print('hello world') \n ```. NEVER output code without these backticks, as this will break the frontend."
+    systemPrompt = "You are an AI assistant. Use tools when prompted to by the user, or when you feel they're suitable. Do not swear or use any offensive terms. Do not liken the user to anything potentially offensive or rude. Do not engage or respond to potentially harmful content. You have an endChat function. This is reserved for the user violating policy. CRITICAL INSTRUCTIONS: When writing code snippets, scripts, or terminal commands, ALWAYS use proper Markdown syntax. Prioritise the user's safety and happiness. ALL code must be enclosed by three backticks followed by the language identifier. Example: ```python \n print('hello world') \n ```. NEVER output code without these backticks, as this will break the frontend."
 
     } catch(error) {
         alert("Something went wrong during the startup process!")
     }
-    //TODO: Set the localStorage item when another user is selected.
+     if(routeSelect === "Ollama Local") {
+        apiRoute = 'http://localhost:11434/api';
+    } else if(routeSelect === "Ollama Cloud") {
+        apiRoute = "https://ollama.com/api";
+    }
+loadingSite = false;
 })
 
 
@@ -150,8 +201,6 @@ async function loadUserLists() {
     } catch(error) {
         console.error(error, 'In loadUserLists function')
     }
-  
-
 }
 async function deleteChat(chatIndex) {
     console.log("Deleting:", chatIndex)
@@ -169,9 +218,9 @@ async function deleteChat(chatIndex) {
     alertDialog = false;
 }
 
+function saveBasicSettings () {
 
-async function saveSettings () {
-        localStorage.setItem("tavilyAPIKey", tavilyAPIKey)
+     localStorage.setItem("tavilyAPIKey", tavilyAPIKey)
 
     if(overrideModel) {
         selectedModel = overrideModel;
@@ -179,8 +228,10 @@ async function saveSettings () {
     }
 
     localStorage.setItem('apiRoute', apiRoute);
+    settingsMenu = false;
+}
 
-
+async function saveSettings () {
     if(apiRoute || enteredAPIKey) {
         try {
             const response = await fetch('/API/database/newRoute', {method: 'POST', body: JSON.stringify({apiRoute, enteredAPIKey, passwordEntered}), headers: {
@@ -201,8 +252,6 @@ async function saveSettings () {
          }
     } 
      settingsMenu = false;
-  
-
 }
 
 async function newChat(newChatName) {
@@ -230,11 +279,12 @@ async function loadChats() {
     const response = await fetch('/API/database/fetchChats', {method: 'POST', body: JSON.stringify({userId: $user.userId}), headers: {  
             'Content-Type': 'application/json'
         }})
-    chatArray = await response.json();
-        chatArray = chatArray.reverse();
-        if(chatArray.length < 1) {
-            currentChatId = '';
+        let chatResponse = await response.json();
+        chatResponse = chatResponse.reverse();
+        if(chatResponse.length < 1) {
+            goto('/home')
         }
+         chatArray = chatResponse.filter(c => c.chatId !== undefined);
     
 }
    
@@ -313,22 +363,55 @@ if(chat.messages.length > 0 && $user.userId !== null && !dbInUse) {
 
 }
 
-
+function openNewUserMenu () {
+    closeAll();
+    newUserWindow = true;
+}
 
 async function abort() {
    chat.stop();
 }
 
+function closeAll () {
+    newUserWindow = false;
+    hiddenProfileMenu = true;
+    menuShown = false;
+    settingsMenu = false;
+    alertDialog = false;
+}
+function openProfileAlert(profile) {
+    console.log("User deleted", profile.userName);
+
+}
+
+async function deleteUser(profile) {
+    if(profile.userId == $user.userId) {
+        goto('/home');
+        chat.messages = []
+        $user = {userName: 'Guest', userPlainNum: 0, userId: null}
+    }
+   
+    const response = await fetch('/API/database/deleteUser', {method: 'POST', body: JSON.stringify({profile}), 
+    headers: {  
+            'Content-Type': 'application/json'
+        }})
+
+    await loadUserLists();
+}
 
 $effect(() => {
     if($user) {
-        loadChats();
+       
         console.log(`User has switched accounts. Current account: ${$user.userName}. Chats have been fetched.`)
+        untrack(() => {
+             loadChats();
+        })
     }
 })
 
 $effect(() => {
     if($user && currentChatId) {
+        
       return(() => {
         if(isLoading === true) {
             abort();
@@ -340,8 +423,10 @@ $effect(() => {
 
 $effect(() => {
 if(currentChatId) {
-untrack(() => {
-    getMessages();
+
+untrack(async () => {
+   await getMessages();
+   errorMessage = '';
 })
 }
 })
@@ -353,32 +438,73 @@ $effect(() => {
         apiRoute = 'http://localhost:11434/api';
     } else if(routeSelect === "Ollama Cloud") {
         apiRoute = "https://ollama.com/api";
-    } else {
-        apiRoute = '';
     }
     localStorage.setItem('routeSelect', routeSelect);
 })
 
+$effect(() => {
+    retryModel;
+    localStorage.setItem('retryModel', retryModel)
+})
 
 
+$effect(() => {
+   const lastMessageForTrackingWowThatIsAReallyLongVariableNameButIGuessItMakesForANiceEasterEgg = chat.messages[chat.messages.length - 1];
+   lastMessageForTrackingWowThatIsAReallyLongVariableNameButIGuessItMakesForANiceEasterEgg?.parts?.[lastMessageForTrackingWowThatIsAReallyLongVariableNameButIGuessItMakesForANiceEasterEgg.parts.length - 1]?.text;
+    if(autoScroll) {
+       (async () => {
+        await tick();
+        if(element) {
+             element.scroll({top: element.scrollHeight, behavior: "smooth"})
+        }
+       
+       })();
+    }
+})
 
 
 </script>
 
 
 <div class="centerdiv">
+{#if !loadingSite}
+<div class="newUserMenu" class:hiddenMenu={!newUserWindow}>
+    <h2>New User</h2>
+    <p>Username:</p>
+    <input placeholder="E.g, Dad" bind:value={newUserName}>
+    <button class="newUserButton" onclick={newUser}>Add</button>
+</div>
+
     <div class="settingsMenu" class:hiddenMenu={!settingsMenu}>
+    {#if settingsPage === 1}
         <h2>Settings:</h2>
         <p style="margin-top: 10px;">Tavily API Key (web search)</p>
         <input bind:value={tavilyAPIKey} type="password" placeholder="tvly-dev...">
-        <p>Custom model selection</p>
+        <p>Fallback Model:</p>
+        <input bind:value={retryModel} placeholder="E.g, gemma4:31b">
+        <p>Custom model selection (override)</p>
         <input bind:value={overrideModel} placeholder="E.g, Llama3.2:3B">
-        <div class="divider"></div>
+        <div class="buttonRow">
+        <div class="fatDiv">
+            <button class="advancedButton" onclick={() => {settingsPage = 2}}><p>Advanced</p></button>
+        </div>
+            
+        <div class="right">
+             <button class="saveButton" style="background-color: #d17960;" onclick={saveBasicSettings}>Save</button>
+          <button class="saveButton" onclick={() => {
+            settingsMenu = false
+          }}>Cancel</button>
+        </div>
+        </div>
+        
+       
+{:else if settingsPage === 2}
         <h2>Advanced Settings</h2>
         <p>An administrator password is needed to change the following settings.</p>
         <p style="margin-top: 10px;">Password</p>
      <input bind:value={passwordEntered} type="password" placeholder="E.g, ABC123">
 
+     
         <p>AI completion endpoint (Ollama cloud/local recommended)</p>
         <select bind:value={routeSelect}>
             <option value="Ollama Local">Default Ollama Local</option>
@@ -389,30 +515,59 @@ $effect(() => {
         <input bind:value={apiRoute} placeholder="http://localhost:11434/api">
         {/if}
         {#if !apiRoute.startsWith('http://localhost')}
-        <p>API key (if applicable)</p>
+        <p>Replace API key (if applicable)</p>
         <input bind:value={enteredAPIKey} type="password">
         {/if}
    
+         <div class="buttonRow">
+        <div class="fatDiv">
+            <button class="advancedButton" onclick={() => {settingsPage = 1}}><p>Back</p></button>
+        </div>
+            
+        <div class="right">
         <button class="saveButton" style="background-color: #d17960;" onclick={saveSettings}>Save</button>
           <button class="saveButton" onclick={() => {
             settingsMenu = false
+            settingsPage = 1
           }}>Cancel</button>
-        
+          </div>
+          </div>
+        {/if} 
     </div>
+   
 <div class="profileWindow" class:hiddenMenu={hiddenProfileMenu}>
+<p>You're currently logged in as</p>
 <h2>{$user.userName}</h2>
+<p>Select another profile to switch.</p>
 {#each userList as userItem}
-<button onclick={() => {
+{#if userItem.userId != $user.userId}
+
+<div class='userItemRow'>
+<button class="userProfileButton" onclick={() => {
     user.set(userItem);
     localStorage.setItem('previousUser', JSON.stringify(userItem))
     goto('/home');
-    currentChatId = ''
+  
+    chat.messages = [];
     chatArray = [];
+    hiddenProfileMenu = true;
 }}>
     <p>{userItem.userName}</p>
 </button>
-
+{#if userItem.userId != null}
+<button onclick={() => {deleteUser(userItem)}}>
+   <CircleX></CircleX> 
+   
+</button>
+{/if}
+</div>
+{/if}
 {/each}
+<div class='divider'></div>
+<button class='newUserButton' onclick={() => {
+    closeAll();
+    openNewUserMenu();
+    }}>New User</button>
 </div>
 <div class="alert" class:hiddenMenu={!alertDialog}>
     <h2>Are you sure you want to delete the selected chat?</h2>
@@ -424,7 +579,7 @@ $effect(() => {
 </div>
 
 <div class="leftMenu" class:hiddenMenu={!menuShown} >
-{#if models}
+{#if models && models.find(m => m.model === selectedModel)}
 <select style="margin-top: 10px;" bind:value={selectedModel}>
     {#each models as model}
     <option value={model.model}>{model.name}</option>
@@ -432,11 +587,10 @@ $effect(() => {
 </select>
 {/if}
 <div class="closePanelFullExtent">
-  <h2>Chats:</h2>
+  <h2 style="margin-top: 10px;">Chats:</h2>
      <button onclick={() => {
-        menuShown = !menuShown;
-
-}}><PanelLeft></PanelLeft></button>
+        closeAll();
+}}><PanelLeft style='margin-top: 10px;'></PanelLeft></button>
 </div>
 {#if $user.userId}
 
@@ -448,14 +602,25 @@ $effect(() => {
 <div class="divider"></div>
 {#if chatArray.length >= 1}
 {#each chatArray as chatItem}
+{#if chatItem.chatId}
 <div class="closePanelFullExtent">
+{#if chatItem.chatId !== currentChatId}
     <button class="chatButton" onclick={() => {
 goto(`/home?chat=${chatItem.chatId}`);
-console.log('Going to', chatItem.chatId)
-menuShown = false
+console.log('Going to', chatItem.chatId);
+closeAll();
 }}>
     <p>{chatItem.title}</p>
 </button>
+{:else}
+    <button class="chatButton" style="background-color: #4d4d4d;" onclick={() => {
+goto(`/home?chat=${chatItem.chatId}`);
+console.log('Going to', chatItem.chatId);
+closeAll();
+}}>
+    <p>{chatItem.title}</p>
+</button>
+{/if}
 
 <button onclick={() => {openAlert(chatItem)}}>
    <CircleX></CircleX> 
@@ -463,16 +628,16 @@ menuShown = false
 
 
 </div>
-
+{/if}
 {/each}
 
 
 {:else}
 <p>No chats found, create one to get started!</p>
 {/if}
-<button class="settings" onclick={() => {settingsMenu = !settingsMenu;
-    menuShown = false
-    hiddenProfileMenu = true
+<button class="settings" onclick={() => {
+    closeAll();
+    settingsMenu = !settingsMenu;
 }}>
     <p>Settings</p>
     <Settings></Settings>
@@ -484,10 +649,8 @@ menuShown = false
 <div class="topBar">
     {#if !menuShown}
      <button onclick={() => {
+        closeAll();
         menuShown = !menuShown;
-        settingsMenu = false
-        hiddenProfileMenu = true    
-
 }}><PanelLeft></PanelLeft></button>
 {:else}
 <placeholder></placeholder>
@@ -500,9 +663,14 @@ menuShown = false
     </p>
    
 <button onclick={() => {
-    hiddenProfileMenu = !hiddenProfileMenu;
-    menuShown = false
-    settingsMenu = false
+    const open = !hiddenProfileMenu;
+    closeAll();
+    if(open) {
+         hiddenProfileMenu = true;
+    } else {
+        hiddenProfileMenu = false
+    }
+   
 }}>
     <img src="/guestIcon.png" class="pfp" alt="The guest's profile icon">
 </button>
@@ -517,7 +685,7 @@ menuShown = false
 
   {/if}
 {#if chat.messages.length > 0}
-<div class="messagesDiv mt-4">
+<div class="messagesDiv mt-4" bind:this={element} onscroll={handleScrolling}>
  
     {#each chat.messages as message}
    
@@ -540,7 +708,6 @@ menuShown = false
            {#each message.parts as part}
 
     {#if part.type.startsWith('tool-')}
-    <Wrench style='color: white;' size=30></Wrench>
     <p>Tool used: {part.type.slice(5)}</p>
     {/if}
 
@@ -562,9 +729,10 @@ menuShown = false
    
             {:else if $user.userId === null}
 <h1>Welcome.</h1>
-<p>You're currently logged in as a guest.</p>
+<p style="text-align: center;">You're currently logged in as a guest. <br> No data will be saved from this session.</p>
         {:else}
-<h1>Open a chat to get started!</h1>
+        <h2>Hey, {$user.userName}!</h2>
+<h1 style="margin: 10px;">Open a chat to get started!</h1>
 <p>Click the button in the top left corner to open the chats menu.</p>
 
 {/if}
@@ -611,10 +779,86 @@ menuShown = false
 
 {/if}
 
+{:else}
+<h1>Loading...</h1>
+{/if}
 </div>
 
 
 <style>
+.userItemRow {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    gap: 10px;
+    align-items: center;
+    justify-content: space-between;
+}
+.buttonRow {
+    width: auto;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 20px;
+    align-items: center;
+    gap: 20px;
+
+}
+.fatDiv {
+    width: 20%;
+    padding: 0;
+    text-align: left;
+}
+.right {
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    height: auto;
+    width: auto;
+}
+.advancedButton {
+
+color: rgb(98, 106, 207);
+text-decoration: underline;
+}
+.userProfileButton {
+     background-color: rgb(46, 46, 47);
+    border-radius: 5px;
+    padding: 5px;
+    width: 100%;
+}
+.newUserButton {
+    background-color: rgb(80, 86, 174);
+    border-radius: 5px;
+    padding: 5px;
+}
+
+.newUserMenu {
+    opacity: 1;
+    z-index: 2;
+    box-shadow: 0px 4px 50px 10px rgba(0, 0, 0, 0.384);
+    height: auto;
+    width: auto;
+    padding: 20px;
+    gap: 10px;
+    display: flex;
+    flex-direction: column;
+    transition: 0.3s;
+       background-color: rgb(58, 58, 58);
+    border-radius: 15px;
+    position: fixed;
+    top: 10%;
+}
+.newUserMenu.hiddenMenu {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+
+.hiddenMenu {
+    pointer-events: none;
+}
 .error {
     background-color: rgb(162, 117, 117);
     border: red 1px solid;
@@ -628,9 +872,14 @@ menuShown = false
 
 .saveButton {
     background-color: rgb(118, 124, 126);
-    height: 30px;
-    border-radius: 20px;
-
+    height: 40px;
+    width: 70px;
+    border-radius: 10px;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  
 }
 .lilButton {
     transition: 0.2s;
@@ -639,8 +888,10 @@ menuShown = false
     transform: scale(1.1);
 }
 
+
 .settingsMenu {
 opacity: 1;
+z-index: 2;
 box-shadow: 0px 4px 20px 10px rgba(0, 0, 0, 0.384);
 height: auto;
 width: clamp(25rem, 30vw, 40rem);
@@ -649,8 +900,8 @@ gap: 10px;
 display: flex;
 flex-direction: column;
  transition: 0.3s;
- background-color: #5a5a5a;
- border-radius: 30px;
+background-color: rgb(58, 58, 58);
+ border-radius: 20px;
  position: fixed;
  top: 10%;
 }
@@ -664,7 +915,7 @@ height: 0;
 
 .pfp {
 width: 28px;
-border: solid rgb(113, 120, 209) 3px;
+border: solid rgb(80, 86, 174) 3px;
 border-radius: 50%;
 image-rendering: optimizeQuality;
 }
@@ -803,11 +1054,13 @@ padding: 10px 20px 10px 20px;
 }
 
 .profileWindow {
-    height: 300px;
+    height: auto;
+    max-height: 600px;
     width: clamp(20rem, 20vw, 80vw);
     background-color: rgb(58, 58, 58);
     position: fixed;
     right: 20px;
+    overflow: auto;
     top: 60px;
     z-index: 2;
     border-radius: 20px;
@@ -818,8 +1071,7 @@ padding: 10px 20px 10px 20px;
     display: flex;
     flex-direction: column;
     gap: 10px;
-    padding: 10px 20px 10px 20px;
-
+    padding: 20px;
 }
 
 .profileWindow.hiddenMenu {
@@ -842,7 +1094,7 @@ transform: scaleX(0);
 h2 {
     font-size: 20px;
     font-weight: 500;
-    line-height: 1.5;
+    line-height: 1;
 }
 
 .messagesDiv {
@@ -889,6 +1141,7 @@ h2 {
      font-family: "oswald", sans-serif;
      font-weight: 400;
      letter-spacing: 1.5px;
+     line-height: 1.0;
  }
 
  textarea {

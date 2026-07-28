@@ -9,16 +9,13 @@ import { db } from "$lib/database.js";
 
 
 export async function POST({ request }) {
-  const{ selectedModel, systemPrompt, tavilyAPIKey, messages} = await request.json();
-
+  const{ selectedModel, systemPrompt, tavilyAPIKey, messages, currentChatId, userId} = await request.json();
 
   let apiRouteSnapshot = await db.ref(`site/APIRoute`).get();
   let apiKeySnapshot = await db.ref(`site/APIKey`).get();
-
   let apiRoute = apiRouteSnapshot.val();
   let apiKey = apiKeySnapshot.val();
-
-  let baseURL = apiRoute ? String(apiRoute) : 'http://localhost:11434/api'
+  let baseURL = apiRoute ? String(apiRoute) : 'https://ollama.com/api'
 
   async function searchWeb(query) {
     if(!tavilyAPIKey) {
@@ -69,6 +66,21 @@ try {
         return {response: `Search error: ${e.message}`}
       }
       },
+    }),
+    endChat: tool({
+      description: "End the chat if the user violates the rules. Before calling this function, provide the reason and tell the user that you're ending the chat.",
+      inputSchema: z.object({
+        reason: z.string().describe('The reason for ending the chat, e.g: inappropriate content')
+      }),
+      execute: async ({ reason }) => {
+        try {
+          console.log(currentChatId);
+       await db.ref(`${userId}/chats/${currentChatId}`).remove()
+       return {response: 'Success'}
+        } catch(e) {
+          return {response: e}
+        }
+      }
     })
   },
       
