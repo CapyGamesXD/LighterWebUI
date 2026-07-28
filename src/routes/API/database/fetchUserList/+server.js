@@ -5,11 +5,11 @@ import { db } from "$lib/database";
 export async function POST({request}) {
 const snapshot = await db.ref(`/lighterwebui/users`).get();
 
-let list = snapshot.val() || [];
+let val = await snapshot.val() || [];
+let storedUsers = val ? Object.values(val) : [];
 
-if(list[0] == null || list[0] == undefined) {
-    list = [{userName: "Guest", userId: null},{userName: 'User 1', userId: '1'}]
-}
+let list = [...storedUsers, {userName: "Guest", userId: null}]
+
 
 return json({list})
 
