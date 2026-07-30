@@ -14,7 +14,7 @@ import hljs from 'highlight.js';
 let settingsPage = $state(1)
 let newUserWindow = $state(false)
 let loadingSite = $state(true)
-let retryModel = $state('gemma4:31b')
+let retryModel = $state('gpt-oss:120b')
 let settingsMenu = $state(false)
 let models = $state();
 let selectedModel = $state();
@@ -27,7 +27,7 @@ let userList = $state([{}]);
 let reply = $state('');
 let dbInUse = $state(false)
 let controller;
-let systemPrompt = $state(`You are an AI assistant.`)
+let systemPrompt = $state("")
 let menuShown = $state(false)
 let tavilyAPIKey = $state('');
 let apiRoute = $state('https://ollama.com/api');
@@ -75,7 +75,10 @@ async function newUser() {
     })
   }),
 onFinish: async (message) => {
-    await storeMessages();
+    if(!errorMessage) {
+       await storeMessages(); 
+    }
+    
     if(chat.messages[chat.messages.length - 1].parts.find(p => p.type === 'tool-endChat')) {
         errorMessage = "Chat has been ended due to a rule violation."
         chatArray = chatArray.filter(c => c.chatId !== currentChatId);
@@ -89,7 +92,7 @@ onError: async (error) => {
     errorMessage = error.message || "An unexpected error occurred";
     if(selectedModel !== retryModel && models.some(m => m.model === retryModel)) {
             errorMessage = 'An error occured. Retrying with another model...'
-            selectedModel = 'gemma4:31b'
+            selectedModel = 'gpt-oss:120b'
             setTimeout(async () => {
                 chat.messages.pop();
                 input = userPrompt;
@@ -152,23 +155,23 @@ onMount(async () => {
     apiRoute = localStorage.getItem('apiRoute') || '';
     routeSelect = localStorage.getItem('routeSelect') || 'Ollama Cloud';
     overrideModel = localStorage.getItem('overrideModel');
-    retryModel = localStorage.getItem('retryModel') || 'gemma4:31b';
-    
+    retryModel = localStorage.getItem('retryModel') || 'gpt-oss:120b';
+    systemPrompt = localStorage.getItem('storedPrompt') || "You are an AI assistant. Use tools when prompted to by the user, or when you feel they're suitable. Do not swear or use any offensive terms. Do not liken the user to anything potentially offensive or rude. Do not engage or respond to potentially harmful content. You have an endChat function. This is reserved for the user violating policy. CRITICAL INSTRUCTIONS: When writing code snippets, scripts, or terminal commands, ALWAYS use proper Markdown syntax. Prioritise the user's safety and happiness. ALL code must be enclosed by three backticks followed by the language identifier. Example: ```python \n print('hello world') \n ```. NEVER output code without these backticks, as this will break the frontend.";
     try {
          //This is probably a bit excessive, but the userId controls where in the DB the data is stored. PlainNum helps with order :D I'll see whether I use it or not. 
     const storedUser = localStorage.getItem('previousUser') ? JSON.parse(localStorage.getItem('previousUser')) : {userName: 'Guest', userPlainNum: 0, userId: null};
-    if(storedUser !== undefined && storedUser !== '' && storedUser !== null) {
+    await loadUserLists();
+    if(storedUser !== undefined && storedUser !== '' && storedUser !== null && userList.find(u => u.userId === storedUser.userId)) {
+
         user.set(storedUser)
     }
     console.log("User:", user)
 } catch (e) {
     console.error(e)
 }
- await loadUserLists();
  try {
     await fetchModels();
    
-    systemPrompt = "You are an AI assistant. Use tools when prompted to by the user, or when you feel they're suitable. Do not swear or use any offensive terms. Do not liken the user to anything potentially offensive or rude. Do not engage or respond to potentially harmful content. You have an endChat function. This is reserved for the user violating policy. CRITICAL INSTRUCTIONS: When writing code snippets, scripts, or terminal commands, ALWAYS use proper Markdown syntax. Prioritise the user's safety and happiness. ALL code must be enclosed by three backticks followed by the language identifier. Example: ```python \n print('hello world') \n ```. NEVER output code without these backticks, as this will break the frontend."
 
     } catch(error) {
         alert("Something went wrong during the startup process!")
@@ -229,9 +232,12 @@ function saveBasicSettings () {
 
     localStorage.setItem('apiRoute', apiRoute);
     settingsMenu = false;
+    localStorage.setItem('retryModel', retryModel);
+    localStorage.setItem('storedPrompt', systemPrompt);
 }
 
 async function saveSettings () {
+    
     if(apiRoute || enteredAPIKey) {
         try {
             const response = await fetch('/API/database/newRoute', {method: 'POST', body: JSON.stringify({apiRoute, enteredAPIKey, passwordEntered}), headers: {
@@ -251,7 +257,15 @@ async function saveSettings () {
             alert("Password incorrect/invalid. Please try again.")
          }
     } 
+
+    if(routeSelect === "Ollama Local") {
+        apiRoute = 'http://localhost:11434/api';
+    } else if(routeSelect === "Ollama Cloud") {
+        apiRoute = "https://ollama.com/api";
+    }
+    localStorage.setItem('routeSelect', routeSelect);
      settingsMenu = false;
+     settingsPage = 1;
 }
 
 async function newChat(newChatName) {
@@ -308,9 +322,6 @@ async function fetchModels() {
 
 }
 
-
-
-
 async function getMessages() {
     const currentUserId = $user.userId;
     if(currentChatId && currentUserId !== null && !dbInUse) {
@@ -340,11 +351,11 @@ chat.messages = [];
 
 async function storeMessages() {
 if(chat.messages.length > 0 && $user.userId !== null && !dbInUse) {
-    
          try {
         dbInUse = true
+        const newMessages = chat.messages.slice(-2)
         const response = await fetch('/API/database', {
-        body: JSON.stringify({currentChatId, userId: $user.userId, messages: chat.messages}), 
+        body: JSON.stringify({currentChatId, userId: $user.userId, newMessages}), 
         method: 'POST', 
          headers: {  
             'Content-Type': 'application/json'
@@ -432,20 +443,7 @@ untrack(async () => {
 })
 
 
-$effect(() => {
-    routeSelect;
-    if(routeSelect === "Ollama Local") {
-        apiRoute = 'http://localhost:11434/api';
-    } else if(routeSelect === "Ollama Cloud") {
-        apiRoute = "https://ollama.com/api";
-    }
-    localStorage.setItem('routeSelect', routeSelect);
-})
 
-$effect(() => {
-    retryModel;
-    localStorage.setItem('retryModel', retryModel)
-})
 
 
 $effect(() => {
@@ -473,6 +471,7 @@ $effect(() => {
     <p>Username:</p>
     <input placeholder="E.g, Dad" bind:value={newUserName}>
     <button class="newUserButton" onclick={newUser}>Add</button>
+    <button class="newUserButton" style="background-color: black;" onclick={() => {newUserWindow = false; newUserName = '';}}>Cancel</button>
 </div>
 
     <div class="settingsMenu" class:hiddenMenu={!settingsMenu}>
@@ -480,10 +479,12 @@ $effect(() => {
         <h2>Settings:</h2>
         <p style="margin-top: 10px;">Tavily API Key (web search)</p>
         <input bind:value={tavilyAPIKey} type="password" placeholder="tvly-dev...">
-        <p>Fallback Model:</p>
+        <p>Fallback model:</p>
         <input bind:value={retryModel} placeholder="E.g, gemma4:31b">
         <p>Custom model selection (override)</p>
         <input bind:value={overrideModel} placeholder="E.g, Llama3.2:3B">
+        <p>System prompt:</p>
+        <textarea class="smallTA" placeholder="You're a capybara eating grass in the amazon rainforest..." bind:value={systemPrompt}></textarea>
         <div class="buttonRow">
         <div class="fatDiv">
             <button class="advancedButton" onclick={() => {settingsPage = 2}}><p>Advanced</p></button>
@@ -493,6 +494,10 @@ $effect(() => {
              <button class="saveButton" style="background-color: #d17960;" onclick={saveBasicSettings}>Save</button>
           <button class="saveButton" onclick={() => {
             settingsMenu = false
+            overrideModel = localStorage.getItem('overrideModel') || '';
+            retryModel = localStorage.getItem('retryModel') || 'gpt-oss:120b';
+            systemPrompt = localStorage.getItem('storedPrompt') || "You are an AI assistant. Use tools when prompted to by the user, or when you feel they're suitable. Do not swear or use any offensive terms. Do not liken the user to anything potentially offensive or rude. Do not engage or respond to potentially harmful content. You have an endChat function. This is reserved for the user violating policy. CRITICAL INSTRUCTIONS: When writing code snippets, scripts, or terminal commands, ALWAYS use proper Markdown syntax. Prioritise the user's safety and happiness. ALL code must be enclosed by three backticks followed by the language identifier. Example: ```python \n print('hello world') \n ```. NEVER output code without these backticks, as this will break the frontend."
+            tavilyAPIKey = localStorage.getItem('tavilyAPIKey') || ''
           }}>Cancel</button>
         </div>
         </div>
@@ -527,8 +532,10 @@ $effect(() => {
         <div class="right">
         <button class="saveButton" style="background-color: #d17960;" onclick={saveSettings}>Save</button>
           <button class="saveButton" onclick={() => {
-            settingsMenu = false
-            settingsPage = 1
+            settingsMenu = false;
+            settingsPage = 1;
+            routeSelect = localStorage.getItem('routeSelect');
+            passwordEntered = '';
           }}>Cancel</button>
           </div>
           </div>
@@ -692,7 +699,7 @@ closeAll();
  
         {#if message.role == 'user'}
             <div class="userSide">
-            <h2>You:</h2>
+            <h2 style="margin-bottom: 10px;">You:</h2>
             {#if message.parts}
             {#each message.parts as part}
             {#if part.type === 'text'}
@@ -726,14 +733,13 @@ closeAll();
         {#if chat.messages.length === 0}
         {#if currentChatId !== '' && $user.userId !== null}
             <h1>Welcome back, {$user.userName}</h1>
-   
             {:else if $user.userId === null}
-<h1>Welcome.</h1>
-<p style="text-align: center;">You're currently logged in as a guest. <br> No data will be saved from this session.</p>
+<h1 style="margin-bottom: 10px;">Welcome.</h1>
+<p class="widthLP" style="text-align: center;">You're currently logged in as a guest. <br> No data will be saved from this session.</p>
         {:else}
         <h2>Hey, {$user.userName}!</h2>
-<h1 style="margin: 10px;">Open a chat to get started!</h1>
-<p>Click the button in the top left corner to open the chats menu.</p>
+<h1 style="margin: 10px; margin-top: 5px; text-align: center;">Open a chat to get started!</h1>
+<p class="widthLP" style="text-align: center;">Click the button in the top left corner to open the chats menu.</p>
 
 {/if}
 {/if}
@@ -786,6 +792,11 @@ closeAll();
 
 
 <style>
+.smallTA {
+    max-width: 100%;
+    min-height: 100px;
+    max-height: 200px;
+}
 .userItemRow {
     display: flex;
     flex-direction: row;
@@ -820,6 +831,9 @@ closeAll();
 
 color: rgb(98, 106, 207);
 text-decoration: underline;
+}
+.widthLP {
+    max-width: 85vw;
 }
 .userProfileButton {
      background-color: rgb(46, 46, 47);
@@ -894,7 +908,7 @@ opacity: 1;
 z-index: 2;
 box-shadow: 0px 4px 20px 10px rgba(0, 0, 0, 0.384);
 height: auto;
-width: clamp(25rem, 30vw, 40rem);
+width: clamp(20rem, 25vw, 30rem);
 padding: 20px;
 gap: 10px;
 display: flex;
@@ -903,7 +917,7 @@ flex-direction: column;
 background-color: rgb(58, 58, 58);
  border-radius: 20px;
  position: fixed;
- top: 10%;
+ top: 15%;
 }
 
 .settingsMenu.hiddenMenu {
@@ -1111,6 +1125,8 @@ h2 {
     padding-top: 20px;
     padding-bottom: 20px;
     word-break: normal;
+    padding: 20px;
+    max-width: 80vw;
 
 }
 
