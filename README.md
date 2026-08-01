@@ -43,12 +43,24 @@ With LighterWebUI, you can run LLMs locally (on the server), on the cloud (Ollam
 ## Security:
 LighterWebUI has a built-in password generator. It only shows the password once for security, so make sure to note it down.
 
-Disclaimers: 
+# Error codes: 
+The following error codes are exclusive to LighterWebUI, as I figured they'd help debugging. I unfortunately didn't end up finishing the error code system, meaning the codes only apply to certain conditions.
+I'm adding this section to avoid confusion if anyone sees the errors and doesn't know what they mean.
+
+U1: User error. E.g, A user has (somehow) tried something they're not authorised to do, e.g, create a chat when the user object is blank.
+
+R1: An unexpected error. Something like an else block that shouldn't be reached. 
+
+M1 (unused): an unavailable model.
+
+P1 (unused): an invalid prompt.
+
+### Disclaimers: 
 
 This project is intended for local LLM hosting, but - should you decide to use a cloud provider (like Ollama), data (including API keys) is stored either in localStorage or in the database.
-These remain unencrypted under the assumption that only authorised individuals can access the database.
+These remain unencrypted under the assumption that only authorised individuals can access them.
 If you decide to deploy this project (which I hope you do :D), your data is your own responsibility.
 
 
 To clarify, this is not a modified version of the existing OpenWebUI project, and is entirely separate, with no affiliation. 
-I removed some of the 'bloat' features that I never found myself using.
+I removed some of the features I deemed unlikely to be essential.
