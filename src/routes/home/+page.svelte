@@ -95,7 +95,7 @@ onError: async (error) => {
     errorMessage = error.message || "An unexpected error occurred";
     if(selectedModel !== retryModel && models.some(m => m.model === retryModel)) {
             errorMessage = 'An error occured with the selected model. Retrying with another model...'
-            selectedModel = 'gpt-oss:120b'
+            selectedModel = retryModel
             setTimeout(async () => {
                 chat.messages.pop();
                 input = userPrompt;
@@ -316,7 +316,7 @@ async function fetchModels() {
 
         if(fetchReply.length >= 1) {
             models = await fetchReply;
-            selectedModel = models[0].model;
+            selectedModel = localStorage.getItem('selectedModel') || models[0].model;
             console.log(models)
         } else {
             selectedModel = ''
