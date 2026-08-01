@@ -11,6 +11,7 @@ import { DefaultChatTransport } from 'ai';
 import { marked } from "marked";
 import hljs from 'highlight.js';
 
+
 let settingsPage = $state(1)
 let newUserWindow = $state(false)
 let loadingSite = $state(true)
@@ -35,7 +36,8 @@ let enteredAPIKey = $state('');
 let passwordEntered = $state('');
 let overrideModel = $state('');
 let errorMessage = $state('')
-let routeSelect = $state('Ollama Cloud')
+let routeSelect = $state('Ollama Local')
+let defaultSystemPrompt = "You are an AI assistant. The frontend is called LighterWebUI. Use tools when prompted to by the user, or when you feel they're suitable. After getting a search response, respond to the user's query. Do not repeat the same search query.  Do not swear or use any offensive terms. Do not liken the user to anything potentially offensive or rude. Do not engage or respond to potentially harmful content. You have an endChat function. This is reserved for the user violating policy. CRITICAL INSTRUCTIONS: When writing code snippets, scripts, or terminal commands, ALWAYS use proper Markdown syntax. Prioritise the user's safety and happiness. ALL code must be enclosed by three backticks followed by the language identifier. Example: ```python \n print('hello world') \n ```. NEVER output code without these backticks, as this will break the frontend. 2: Provide sources in the form of links for web search responses. 3: Use minimal searches per prompt. Avoid surpassing 5 search calls unless otherwise prompted.";
 //This! This works by assigning the user profile details to this variable. That's what each button will do. :) Passing the parameter. This comment was made before I actually add that, so, heh, lil easter egg here :D
 let currentChatId = $derived($page.url.searchParams.get('chat') || '')
 marked.setOptions({
@@ -71,7 +73,8 @@ async function newUser() {
          systemPrompt,
          tavilyAPIKey,
          userId: $user.userId,
-         currentChatId
+         currentChatId,
+
     })
   }),
 onFinish: async (message) => {
@@ -91,7 +94,7 @@ onFinish: async (message) => {
 onError: async (error) => {
     errorMessage = error.message || "An unexpected error occurred";
     if(selectedModel !== retryModel && models.some(m => m.model === retryModel)) {
-            errorMessage = 'An error occured. Retrying with another model...'
+            errorMessage = 'An error occured with the selected model. Retrying with another model...'
             selectedModel = 'gpt-oss:120b'
             setTimeout(async () => {
                 chat.messages.pop();
@@ -153,16 +156,16 @@ onMount(async () => {
     tavilyAPIKey = localStorage.getItem('tavilyAPIKey') || '';
     selectedModel = localStorage.getItem("selectedModel") || '';
     apiRoute = localStorage.getItem('apiRoute') || '';
-    routeSelect = localStorage.getItem('routeSelect') || 'Ollama Cloud';
+    routeSelect = localStorage.getItem('routeSelect') || 'Ollama Local';
     overrideModel = localStorage.getItem('overrideModel');
     retryModel = localStorage.getItem('retryModel') || 'gpt-oss:120b';
-    systemPrompt = localStorage.getItem('storedPrompt') || "You are an AI assistant. Use tools when prompted to by the user, or when you feel they're suitable. Do not swear or use any offensive terms. Do not liken the user to anything potentially offensive or rude. Do not engage or respond to potentially harmful content. You have an endChat function. This is reserved for the user violating policy. CRITICAL INSTRUCTIONS: When writing code snippets, scripts, or terminal commands, ALWAYS use proper Markdown syntax. Prioritise the user's safety and happiness. ALL code must be enclosed by three backticks followed by the language identifier. Example: ```python \n print('hello world') \n ```. NEVER output code without these backticks, as this will break the frontend.";
+    systemPrompt = localStorage.getItem('storedPrompt') || defaultSystemPrompt;
+
     try {
          //This is probably a bit excessive, but the userId controls where in the DB the data is stored. PlainNum helps with order :D I'll see whether I use it or not. 
     const storedUser = localStorage.getItem('previousUser') ? JSON.parse(localStorage.getItem('previousUser')) : {userName: 'Guest', userPlainNum: 0, userId: null};
     await loadUserLists();
     if(storedUser !== undefined && storedUser !== '' && storedUser !== null && userList.find(u => u.userId === storedUser.userId)) {
-
         user.set(storedUser)
     }
     console.log("User:", user)
@@ -184,17 +187,22 @@ onMount(async () => {
 loadingSite = false;
 })
 
+function confirmUserDelete(userToDelete) {
+    if (window.confirm(`Are you sure you want to delete ${userToDelete.userName}?`)) {
+        deleteUser(userToDelete)
+  } else {
+    console.log("User deletion exited")
+  }
+}
 
 function openAlert(chat) {
-    alertDialog = true;
-    itemToDelete = chat;
+    if (window.confirm(`Are you sure you want to delete "${chat.title}"?`)) {
+        deleteChat(chat)
+  } else {
+    console.log("Chat deletion exited")
+  }
 }
 
-
-function cancelDelete () {
-    alertDialog = false;
-    itemToDelete = [];
-}
 async function loadUserLists() {
     try {
     const response = await fetch('/API/database/fetchUserList', {method: 'POST'})
@@ -218,7 +226,7 @@ async function deleteChat(chatIndex) {
         }})
 
     await loadChats();
-    alertDialog = false;
+
 }
 
 function saveBasicSettings () {
@@ -234,6 +242,7 @@ function saveBasicSettings () {
     settingsMenu = false;
     localStorage.setItem('retryModel', retryModel);
     localStorage.setItem('storedPrompt', systemPrompt);
+
 }
 
 async function saveSettings () {
@@ -252,9 +261,10 @@ async function saveSettings () {
         } else {
             console.log("Save worked!")
         }
-        
+       
         } catch(e) {
             alert("Password incorrect/invalid. Please try again.")
+            routeSelect = localStorage.getItem('routeSelect') || 'Ollama Local'
          }
     } 
 
@@ -263,6 +273,7 @@ async function saveSettings () {
     } else if(routeSelect === "Ollama Cloud") {
         apiRoute = "https://ollama.com/api";
     }
+     await fetchModels();
     localStorage.setItem('routeSelect', routeSelect);
      settingsMenu = false;
      settingsPage = 1;
@@ -390,10 +401,7 @@ function closeAll () {
     settingsMenu = false;
     alertDialog = false;
 }
-function openProfileAlert(profile) {
-    console.log("User deleted", profile.userName);
 
-}
 
 async function deleteUser(profile) {
     if(profile.userId == $user.userId) {
@@ -485,6 +493,7 @@ $effect(() => {
         <input bind:value={overrideModel} placeholder="E.g, Llama3.2:3B">
         <p>System prompt:</p>
         <textarea class="smallTA" placeholder="You're a capybara eating grass in the amazon rainforest..." bind:value={systemPrompt}></textarea>
+       
         <div class="buttonRow">
         <div class="fatDiv">
             <button class="advancedButton" onclick={() => {settingsPage = 2}}><p>Advanced</p></button>
@@ -496,8 +505,9 @@ $effect(() => {
             settingsMenu = false
             overrideModel = localStorage.getItem('overrideModel') || '';
             retryModel = localStorage.getItem('retryModel') || 'gpt-oss:120b';
-            systemPrompt = localStorage.getItem('storedPrompt') || "You are an AI assistant. Use tools when prompted to by the user, or when you feel they're suitable. Do not swear or use any offensive terms. Do not liken the user to anything potentially offensive or rude. Do not engage or respond to potentially harmful content. You have an endChat function. This is reserved for the user violating policy. CRITICAL INSTRUCTIONS: When writing code snippets, scripts, or terminal commands, ALWAYS use proper Markdown syntax. Prioritise the user's safety and happiness. ALL code must be enclosed by three backticks followed by the language identifier. Example: ```python \n print('hello world') \n ```. NEVER output code without these backticks, as this will break the frontend."
+            systemPrompt = localStorage.getItem('storedPrompt') || defaultSystemPrompt;
             tavilyAPIKey = localStorage.getItem('tavilyAPIKey') || ''
+            
           }}>Cancel</button>
         </div>
         </div>
@@ -519,7 +529,7 @@ $effect(() => {
         {#if routeSelect === 'Custom'}
         <input bind:value={apiRoute} placeholder="http://localhost:11434/api">
         {/if}
-        {#if !apiRoute.startsWith('http://localhost')}
+        {#if !apiRoute.startsWith('http://localhost') || routeSelect === 'Ollama Cloud'}
         <p>Replace API key (if applicable)</p>
         <input bind:value={enteredAPIKey} type="password">
         {/if}
@@ -562,7 +572,7 @@ $effect(() => {
     <p>{userItem.userName}</p>
 </button>
 {#if userItem.userId != null}
-<button onclick={() => {deleteUser(userItem)}}>
+<button onclick={() => {confirmUserDelete(userItem)}}>
    <CircleX></CircleX> 
    
 </button>
@@ -575,14 +585,6 @@ $effect(() => {
     closeAll();
     openNewUserMenu();
     }}>New User</button>
-</div>
-<div class="alert" class:hiddenMenu={!alertDialog}>
-    <h2>Are you sure you want to delete the selected chat?</h2>
-    <p>This action can not be undone.</p>
-    <div class="row" style="margin-top: 10px;">
-        <button class="yesButton" onclick={() => deleteChat(itemToDelete)}>Yes</button>
-        <button class="noButton" onclick={cancelDelete}>No</button>
-    </div>
 </div>
 
 <div class="leftMenu" class:hiddenMenu={!menuShown} >
@@ -735,7 +737,7 @@ closeAll();
             <h1>Welcome back, {$user.userName}</h1>
             {:else if $user.userId === null}
 <h1 style="margin-bottom: 10px;">Welcome.</h1>
-<p class="widthLP" style="text-align: center;">You're currently logged in as a guest. <br> No data will be saved from this session.</p>
+<p class="widthLP" style="text-align: center;">You're currently logged in as a guest. <br> No data will be saved from this session. <br> To log in, click the button at the top right and select a profile.</p>
         {:else}
         <h2>Hey, {$user.userName}!</h2>
 <h1 style="margin: 10px; margin-top: 5px; text-align: center;">Open a chat to get started!</h1>
@@ -983,10 +985,27 @@ image-rendering: optimizeQuality;
     border-radius: 20px;
 }
 .markedDiv :global(hr) {
+    border: none;
 height: 3px;
     width: 100%;
+margin-top: 10px;
+margin-bottom: 10px;
     background-color: rgb(74, 74, 74);
+    border-radius: 30px;
+}
+
+.markedDiv :global(table) {
+    border-collapse: collapse;
+    background-color: #1f1f1f;
+    margin: 20px;
+    min-width: 100%;
     border-radius: 20px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
+}
+
+.markedDiv :global(th),
+.markedDiv :global(td) {
+    padding: 12px 15px;
 }
 .settings {
    margin-top: auto;

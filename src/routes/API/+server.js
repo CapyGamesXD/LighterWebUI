@@ -16,19 +16,23 @@ export async function POST({ request }) {
   let apiRoute = apiRouteSnapshot.val();
   let apiKey = apiKeySnapshot.val();
   let baseURL = apiRoute ? String(apiRoute) : 'https://ollama.com/api'
-
+  let searchCount = 0;
   async function searchWeb(query) {
     if(!tavilyAPIKey) {
-      return {error: "No Tavily API key."}
+      return {error: "No Tavily API key. Prompt the user to enter one in the site's settings"}
     }
+   searchCount++;
     try {
       const tvly = tavily({ apiKey: tavilyAPIKey });
-      const response = await tvly.search(query, {maxResults: 2});
+      const response = await tvly.search(query, {maxResults: 4});
       console.log("Search response: ", response)
-      return response
+      
+      return {results: response, searchCount: `Current search: ${searchCount}.`};
     } catch (e) {
       console.error(e)
+      return {error: `Search failed ${e}`}
     }
+  
   }
 
 const ollama = createOllama(
@@ -42,7 +46,7 @@ try {
       const response = await streamText({
   model: ollama(selectedModel || 'gemma4:31b-cloud'),
   messages: await convertToModelMessages(messages),
-  stopWhen: stepCountIs(5),
+  stopWhen: stepCountIs(12),
   system: systemPrompt,
   tools: {
     testTools: tool({
@@ -57,15 +61,8 @@ try {
       inputSchema: z.object({
         query: z.string().describe('The query to search'),
       }),
-      execute: async ({ query }) => {
-      try {
-       const response = await searchWeb(query);
-        return {response}
-      } catch (e) {
-        console.error(e)
-        return {response: `Search error: ${e.message}`}
-      }
-      },
+      execute: async ({ query }) => searchWeb(query)
+      
     }),
     endChat: tool({
       description: "End the chat if the user violates the rules. Before calling this function, provide the reason and tell the user that you're ending the chat.",
@@ -78,7 +75,7 @@ try {
        await db.ref(`${userId}/chats/${currentChatId}`).remove()
        return {response: 'Success'}
         } catch(e) {
-          return {response: e}
+          return {response: e.message}
         }
       }
     })
