@@ -8,27 +8,20 @@ import { goto } from "$app/navigation";
     let copyAccess = $state(true)
     let newUserName = $state('');
     let isUserNew = $state(true)
-    function testCopy () {
-        try {
-
-        navigator.clipboard.writeText('');
-        copyAccess = true;
-        } catch(e) {
-copyAccess = false;
-        }
-    }
+   
     function copyPass () {
         try {
         navigator.clipboard.writeText(password);
         copyAccess = false;
         } catch (e) {
-        alert('Something went wrong while copying. Please copy manually.')
+        alert('Something went wrong while copying. Please select and copy manually.')
         }  
     }
 
     async function fetchPass () {
         const response = await fetch('/API/database/generatePassword', {method: 'POST', headers: {'Content-Type': 'application/json'}})
         password = await response.json();
+    
     }
 
     async function newUser() {
@@ -54,12 +47,12 @@ function finishSetup () {
     
     onMount(async () => {
         isUserNew = localStorage.getItem('isUserNew') || true;
-console.log("isUserNew:", isUserNew)
+        console.log("isUserNew:", isUserNew)
         if(isUserNew === false) {
             console.log("Going home")
             goto('/home')
         }
-        testCopy();
+        
         await fetchPass();
     })
     //generatePassword will return a password if one hasn't been generated, and false if it has. 
@@ -83,11 +76,10 @@ console.log("isUserNew:", isUserNew)
 <button class="reallyFancySparklyButton" onclick={() => page++} style="margin-top: 10px;">Start the Magic!</button>
 {:else if page === 2 && password}
 <h1>Your Admin Password:</h1>
-<p>The freshly generated password is: {password}</p>
+<p>The freshly generated password is:</p>
 <div class="passwordBox" style="margin: 10px;">
-    {#if copyAccess}
+    
     <button class="copyButton" onclick={copyPass}><Copy /></button>
-    {/if}
     <p>{password}</p></div>
 <p>Save this and don't let anyone else see it.</p>
 <button class="reallyFancySparklyButton" onclick={() => page++} style="margin-top: 10px;">Next</button>
@@ -105,7 +97,7 @@ console.log("isUserNew:", isUserNew)
 <p>We're almost done! If you need any help with anything or come across any issues, please check the docs or log them in <a href="https://github.com/CapyGamesXD/LighterWebUI">the repo</a>!</p>
 <button class="reallyFancySparklyButton" onclick={finishSetup} style="margin-top: 10px;">Let's GO!</button>
 {:else if password === false}
-<h1>You've already completed the setup. Please go to the <a href="/home">Home page</a></h1>
+<h1>The setup is already complete. Please go to the <a href="/home">Home page</a></h1>
 {/if}
 </div>
 <style>

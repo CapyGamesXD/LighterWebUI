@@ -471,7 +471,7 @@ $effect(() => {
     <h2>New User</h2>
     <p>Username:</p>
     <input placeholder="E.g, Dad" bind:value={newUserName}>
-    <button class="newUserButton" onclick={newUser}>Add</button>
+    <button class="newUserButton" onclick={newUser}>Create Profile</button>
     <button class="newUserButton" style="background-color: black;" onclick={() => {newUserWindow = false; newUserName = '';}}>Cancel</button>
 </div>
 
@@ -546,7 +546,7 @@ $effect(() => {
     </div>
    
 <div class="profileWindow" class:hiddenMenu={hiddenProfileMenu}>
-<p>You're currently logged in as</p>
+<p>You're currently chatting as</p>
 <h2>{$user.userName}</h2>
 <p>Select another profile to switch.</p>
 {#each userList as userItem}
@@ -577,7 +577,7 @@ $effect(() => {
 <button class='newUserButton' onclick={() => {
     closeAll();
     openNewUserMenu();
-    }}>New User</button>
+    }}>New Profile</button>
 </div>
 
 <div class="leftMenu" class:hiddenMenu={!menuShown} >
@@ -939,8 +939,8 @@ image-rendering: optimizeQuality;
     border: none;
 height: 3px;
     width: 100%;
-margin-top: 10px;
-margin-bottom: 10px;
+margin-top: 15px;
+margin-bottom: 15px;
     background-color: rgb(74, 74, 74);
     border-radius: 30px;
 }
@@ -977,6 +977,9 @@ align-items: center;
     justify-content: space-between;
     flex-direction: row;
 
+}
+p {
+    line-height: 1.5;
 }
 .topBar > p {
     position: absolute;
@@ -1110,7 +1113,7 @@ h2 {
     transition: 0.2s;
       max-height: 4vh;
       color: white;
-      text-decoration: none;
+      text-decoration: underline;
  }
  .headLink:hover {
     background-color: rgb(58, 86, 144);
