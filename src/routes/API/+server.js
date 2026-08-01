@@ -10,7 +10,6 @@ import { db } from "$lib/database.js";
 
 export async function POST({ request }) {
   const{ selectedModel, systemPrompt, tavilyAPIKey, messages, currentChatId, userId} = await request.json();
-
   let apiRouteSnapshot = await db.ref(`site/APIRoute`).get();
   let apiKeySnapshot = await db.ref(`site/APIKey`).get();
   let apiRoute = apiRouteSnapshot.val();
@@ -25,7 +24,7 @@ export async function POST({ request }) {
     try {
       const tvly = tavily({ apiKey: tavilyAPIKey });
       const response = await tvly.search(query, {maxResults: 4});
-      console.log("Search response: ", response)
+
       
       return {results: response, searchCount: `Current search: ${searchCount}.`};
     } catch (e) {
@@ -71,7 +70,6 @@ try {
       }),
       execute: async ({ reason }) => {
         try {
-          console.log(currentChatId);
        await db.ref(`${userId}/chats/${currentChatId}`).remove()
        return {response: 'Success'}
         } catch(e) {
@@ -80,8 +78,6 @@ try {
       }
     })
   },
-      
-
 })
 return response.toUIMessageStreamResponse();
 } catch (e) {

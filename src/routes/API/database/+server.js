@@ -10,12 +10,11 @@ export async function POST({request}) {
     try {
         for(const newMessage of newMessages) {
             await db.ref(`${userId}/chats/${currentChatId}/messages/`).push(newMessage)
+           
         }
     } catch (e) {
         console.error("ERROR!", e)
     }
-    
-
     return json({status: 200})
 }
 

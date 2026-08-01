@@ -8,6 +8,6 @@ console.log("The userID that's being sent though is:", userId)
     const snapshot = await db.ref(`${userId}/chats/${currentChatId}/messages/`).get();
     const val = snapshot.val() || {};
     const messagesArray = Object.values(val);
-    console.log('Messages Array:', messagesArray);
+
     return json(messagesArray);
 }

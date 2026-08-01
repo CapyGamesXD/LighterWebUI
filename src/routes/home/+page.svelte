@@ -130,6 +130,7 @@ autoScroll = autoScrollSuitable;
     try {
         await chat.sendMessage({ text: userPrompt });
         scrollToBottom(element);
+        
     } catch (e) {
         input = userPrompt
     } 
@@ -288,7 +289,7 @@ async function newChat(newChatName) {
     } else if (!$user.userId) {
         alert("Error code U1")
     } else {
-        alert("Unknown error! Error U1")
+        alert("Unknown error! Error R1")
     }
 }
 
