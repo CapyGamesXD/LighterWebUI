@@ -63,4 +63,4 @@ If you decide to deploy this project (which I hope you do :D), your data is your
 
 
 To clarify, this is not a modified version of the existing OpenWebUI project, and is entirely separate, with no affiliation. 
-I removed some of the 'bloat' features that I never found myself using.
+I removed some of the features I deemed unlikely to be essential.
