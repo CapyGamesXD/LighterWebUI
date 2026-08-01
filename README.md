@@ -1,13 +1,15 @@
 # LighterWebUI
 
-LighterWebUI is a user-friendly interface for Ollama models. It's quick to set up and (according to my tests) uses as little as under 100MB of RAM at idle.
+LighterWebUI is a user-friendly interface for Ollama models. It's quick to set up and (according to my tests) uses as little as under 70MB of RAM at idle.
 
-With 10 browser tabs of the site open, it went up to 105MB. This value can (of course) fluctuate across systems, and is highly dependent on the number of concurrent users and processes.
+With several browser tabs open, it increases by only a few MB. These values can (of course) fluctuate greatly across systems (and other conditions), and is highly dependent on the number of concurrent users and processes. 
+When running the OpenWebUI Docker container, RAM usage can be between 300MB and 1.5GB depending largely on configuration and user count.
 
 I was inspired to make it when I tried running OpenWebUI + Ollama on my Raspberry Pi 5 4gb. It was... Not the greatest experience XD
 
 It worked, but super slowly, and had that 'one wrong click and it'll crash!' feeling about it. That's why I made LighterWebUI.
 This project was made for a YSWS (you ship, we ship) from Hackclub called [Stardance](https://stardance.hackclub.com).
+OpenWebUI is an incredible, and frankly far more versatile tool than LighterWebUI, but also one with different applications. All of those features come at the cost of RAM. My goal was to run an LLM locally only on a Raspberry Pi, and that works great!
 
 LighterWebUI isn't just a lighter version of OpenWebUI, it's different. Instead of being designed for thousands of worldwide users, it's designed to be hosted locally within a family/small group.
 
