@@ -7,7 +7,7 @@ import { goto } from "$app/navigation";
     let password = $state()
     let copyAccess = $state(true)
     let newUserName = $state('');
-    let isUserNew = $state(true)
+  
    
     function copyPass () {
         try {
@@ -41,18 +41,12 @@ import { goto } from "$app/navigation";
 
 }
 function finishSetup () {
-    localStorage.setItem('isUserNew', JSON.stringify(false));
+   
     goto('/home')
 }
     
     onMount(async () => {
-        isUserNew = localStorage.getItem('isUserNew') || true;
-        console.log("isUserNew:", isUserNew)
-        if(isUserNew === false) {
-            console.log("Going home")
-            goto('/home')
-        }
-        
+    
         await fetchPass();
     })
     //generatePassword will return a password if one hasn't been generated, and false if it has. 
