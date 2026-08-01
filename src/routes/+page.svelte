@@ -105,7 +105,7 @@ console.log("isUserNew:", isUserNew)
 <p>We're almost done! If you need any help with anything or come across any issues, please check the docs or log them in <a href="https://github.com/CapyGamesXD/LighterWebUI">the repo</a>!</p>
 <button class="reallyFancySparklyButton" onclick={finishSetup} style="margin-top: 10px;">Let's GO!</button>
 {:else if password === false}
-<h1>Password has already been generated! Please go to the <a href="/home">Home page</a></h1>
+<h1>You've already completed the setup. Please go to the <a href="/home">Home page</a></h1>
 {/if}
 </div>
 <style>
