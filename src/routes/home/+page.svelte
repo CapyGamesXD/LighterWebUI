@@ -260,7 +260,7 @@ async function saveSettings () {
        
         } catch(e) {
             alert("Password incorrect/invalid. Please try again.")
-           
+            apiRoute = localStorage.getItem('apiRoute');
          }
     } 
 
