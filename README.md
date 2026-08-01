@@ -11,7 +11,7 @@ bun install
 To run build and start it, run:
 ```bash
 bun run build
-bun start
+bun run start
 ```
 
 # Stats:
