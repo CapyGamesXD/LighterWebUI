@@ -2,6 +2,20 @@
 
 LighterWebUI is a user-friendly interface for Ollama models. It's quick to set up and (according to my tests) uses as little as under 70MB of RAM at idle.
 
+To install it, run:
+```bash
+git clone https://github.com/CapyGamesXD/LighterWebUI
+cd ~/LighterWebUI
+bun install
+```
+To run build and start it, run:
+```bash
+bun run build
+bun start
+```
+
+# Stats:
+
 With several browser tabs open, it increases by only a few MB. These values can (of course) fluctuate greatly across systems (and other conditions), and is highly dependent on the number of concurrent users and processes. 
 When running the OpenWebUI Docker container, RAM usage can be between 300MB and 1.5GB depending largely on configuration and user count.
 
