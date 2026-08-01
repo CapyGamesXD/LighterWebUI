@@ -31,12 +31,12 @@ let controller;
 let systemPrompt = $state("")
 let menuShown = $state(false)
 let tavilyAPIKey = $state('');
-let apiRoute = $state('https://ollama.com/api');
+let apiRoute = $state('https://localhost:11434/api');
 let enteredAPIKey = $state('');
 let passwordEntered = $state('');
 let overrideModel = $state('');
 let errorMessage = $state('')
-let routeSelect = $state('Ollama Local')
+
 let defaultSystemPrompt = "You are an AI assistant. The frontend is called LighterWebUI. Use tools when prompted to by the user, or when you feel they're suitable. After getting a search response, respond to the user's query. Do not repeat the same search query.  Do not swear or use any offensive terms. Do not liken the user to anything potentially offensive or rude. Do not engage or respond to potentially harmful content. You have an endChat function. This is reserved for the user violating policy. CRITICAL INSTRUCTIONS: When writing code snippets, scripts, or terminal commands, ALWAYS use proper Markdown syntax. Prioritise the user's safety and happiness. ALL code must be enclosed by three backticks followed by the language identifier. Example: ```python \n print('hello world') \n ```. NEVER output code without these backticks, as this will break the frontend. 2: Provide sources in the form of links for web search responses. 3: Use minimal searches per prompt. Avoid surpassing 5 search calls unless otherwise prompted.";
 //This! This works by assigning the user profile details to this variable. That's what each button will do. :) Passing the parameter. This comment was made before I actually add that, so, heh, lil easter egg here :D
 let currentChatId = $derived($page.url.searchParams.get('chat') || '')
@@ -156,7 +156,7 @@ onMount(async () => {
     tavilyAPIKey = localStorage.getItem('tavilyAPIKey') || '';
     selectedModel = localStorage.getItem("selectedModel") || '';
     apiRoute = localStorage.getItem('apiRoute') || '';
-    routeSelect = localStorage.getItem('routeSelect') || 'Ollama Local';
+    
     overrideModel = localStorage.getItem('overrideModel');
     retryModel = localStorage.getItem('retryModel') || 'gpt-oss:120b';
     systemPrompt = localStorage.getItem('storedPrompt') || defaultSystemPrompt;
@@ -179,11 +179,7 @@ onMount(async () => {
     } catch(error) {
         alert("Something went wrong during the startup process!")
     }
-     if(routeSelect === "Ollama Local") {
-        apiRoute = 'http://localhost:11434/api';
-    } else if(routeSelect === "Ollama Cloud") {
-        apiRoute = "https://ollama.com/api";
-    }
+    
 loadingSite = false;
 })
 
@@ -264,17 +260,13 @@ async function saveSettings () {
        
         } catch(e) {
             alert("Password incorrect/invalid. Please try again.")
-            routeSelect = localStorage.getItem('routeSelect') || 'Ollama Local'
+           
          }
     } 
 
-    if(routeSelect === "Ollama Local") {
-        apiRoute = 'http://localhost:11434/api';
-    } else if(routeSelect === "Ollama Cloud") {
-        apiRoute = "https://ollama.com/api";
-    }
+
      await fetchModels();
-    localStorage.setItem('routeSelect', routeSelect);
+  
      settingsMenu = false;
      settingsPage = 1;
 }
@@ -521,15 +513,15 @@ $effect(() => {
 
      
         <p>AI completion endpoint (Ollama cloud/local recommended)</p>
-        <select bind:value={routeSelect}>
-            <option value="Ollama Local">Default Ollama Local</option>
-            <option value="Ollama Cloud">Default Ollama Cloud</option>
-            <option value="Custom">Custom</option>
+        <select bind:value={apiRoute}>
+            <option value="http://localhost:11434/api">Default Ollama Local</option>
+            <option value="https://ollama.com/api">Default Ollama Cloud</option>
+            <option value="">Custom</option>
         </select>
-        {#if routeSelect === 'Custom'}
+        {#if apiRoute === ''}
         <input bind:value={apiRoute} placeholder="http://localhost:11434/api">
         {/if}
-        {#if !apiRoute.startsWith('http://localhost') || routeSelect === 'Ollama Cloud'}
+        {#if !apiRoute.startsWith('http://localhost')}
         <p>Replace API key (if applicable)</p>
         <input bind:value={enteredAPIKey} type="password">
         {/if}
@@ -544,7 +536,7 @@ $effect(() => {
           <button class="saveButton" onclick={() => {
             settingsMenu = false;
             settingsPage = 1;
-            routeSelect = localStorage.getItem('routeSelect');
+            
             passwordEntered = '';
           }}>Cancel</button>
           </div>
@@ -935,48 +927,6 @@ border: solid rgb(80, 86, 174) 3px;
 border-radius: 50%;
 image-rendering: optimizeQuality;
 }
-.yesButton, .noButton {
-    width: 60px;
-    height: 40px;
-    border-radius: 10px;
-    padding: 20px;
-    display: flex;
-    flex-direction: row;
-    text-align: center;
-    justify-content: center;
-    align-items: center;
-}
-
-.yesButton {
-    background-color: rgb(69, 121, 69);
-}
-.noButton {
-    background-color: rgb(146, 69, 69);
-}
-.row {
-     display: flex;
-    flex-direction: row;
-    text-align: center;
-    justify-content: center;
-    align-items: center;
-    gap: 50%;
-
-}
-.alert {
-    width: 400px;
-    height: 200px;
-    background-color: rgb(54, 54, 54);
-    border-radius: 20px;
-    position: fixed;
-    display: flex;
-    flex-direction: column;
-    text-align: center;
-    justify-content: center;
-    align-items: center;
-    padding: 20px;
-    transition: 0.2s;
-
-}
 .markedDiv :global(pre) {
     background-color: #282c34;
     padding: 15px;
@@ -1117,10 +1067,7 @@ opacity: 0;
 transform: scaleX(0);
 }
 
-.alert.hiddenMenu {
-    opacity: 0;
-transform: scaleX(0);
-}
+
 
 
 
