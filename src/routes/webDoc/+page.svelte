@@ -2,7 +2,7 @@
     import { House } from 'lucide-svelte';
 </script>
 <div class="center">
-<a href="/" style="margin-top: 20px; "><House></House></a>
+<a href="/home" style="margin-top: 20px; "><House></House></a>
 <div class="yapBlock" style="margin-top: 20px;">
      <h1>Web</h1>
     <div style="margin-top: 5px;" class="divider"></div>
