@@ -12,7 +12,8 @@ try {
     const models = reply.models;
     return json(models);   
 } catch (e) {
- console.error(e)   
+ console.error(e) 
+ return json({error: e})  
 }
     
 }
